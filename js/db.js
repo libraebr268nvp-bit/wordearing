@@ -815,13 +815,17 @@ class WordDatabase {
     }
 
     async _addBatch(storeName, dataArray) {
+        if (!dataArray || dataArray.length === 0) return 0;
         const store = await this._getStore(storeName, 'readwrite');
         return new Promise((resolve, reject) => {
             let completed = 0;
             let hasError = false;
             for (const data of dataArray) {
                 try {
-                    const req = store.add(data);
+                    // 对于 autoIncrement 表，删除 id 避免主键冲突
+                    const cleanData = { ...data };
+                    delete cleanData.id;
+                    const req = store.add(cleanData);
                     req.onsuccess = () => {
                         completed++;
                         if (completed >= dataArray.length && !hasError) resolve(completed);
@@ -829,7 +833,7 @@ class WordDatabase {
                     req.onerror = () => {
                         if (!hasError) {
                             hasError = true;
-                            reject(req.error);
+                            reject(new Error(`批量写入失败: ${req.error?.message || '未知错误'}`));
                         }
                     };
                 } catch (e) {

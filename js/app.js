@@ -28,6 +28,7 @@ window.Toast = {
 class WordWizApp {
     constructor() {
         this.currentPage = 'home';
+        this._rendering = false;  // 防止并发渲染
         this.container = document.getElementById('pageContainer');
     }
 
@@ -54,71 +55,84 @@ class WordWizApp {
             // 4. 配置导航
             this._setupNavigation();
 
-            // 5. 监听 hash 变化
+            // 5. 监听 hash 变化（浏览器的前进/后退）
             window.addEventListener('hashchange', () => this._handleRoute());
 
             // 6. 启动每日提醒检查
             NotificationHelper.startReminderChecker();
 
-            // 7. 渲染初始页面
-            const initialPage = this._getPageFromHash() || 'home';
-            await this._renderPage(initialPage);
+            // 7. 渲染初始页面（不依赖 hash，直接渲染）
+            this.currentPage = '';
+            await this._renderPage('home');
 
             console.log('WordWiz 启动完成');
         } catch (err) {
             console.error('启动失败:', err);
-            const errMsg = err.message || String(err);
-            this.container.innerHTML = 
-                '<div style="text-align:center;padding:80px 20px;">' +
-                '<div style="font-size:48px;margin-bottom:16px;">💥</div>' +
-                '<h2>启动失败</h2>' +
-                '<p style="color:var(--text-muted);margin-top:8px;font-size:14px;">' + errMsg + '</p>' +
-                '<div style="margin-top:20px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">' +
-                '<button onclick="location.reload()" class="btn btn-primary">🔄 重新加载</button>' +
-                '<button onclick="window._resetDB()" class="btn btn-danger">🗑️ 重置数据库</button>' +
-                '</div>' +
-                '<div style="margin-top:20px;padding:12px;background:var(--bg-secondary);border-radius:8px;font-size:12px;color:var(--text-muted);text-align:left;max-width:400px;margin-left:auto;margin-right:auto;">' +
-                '<div><strong>可能的原因：</strong></div>' +
-                '<div>1. 请确保通过 http://localhost:3000 访问（不要直接双击 html 文件）</div>' +
-                '<div>2. 浏览器不支持 IndexedDB（请使用 Chrome/Edge 最新版）</div>' +
-                '<div>3. 如果问题持续，请点击「重置数据库」</div>' +
-                '</div></div>';
-            
-            // 注册重置数据库的全局函数
-            window._resetDB = async function() {
-                if (confirm('确定要重置数据库吗？所有数据将被清除！')) {
-                    try {
-                        const req = indexedDB.deleteDatabase('WordWizDB');
-                        req.onsuccess = () => {
-                            window.Toast.show('✅ 数据库已重置，即将刷新...');
-                            setTimeout(() => location.reload(), 1000);
-                        };
-                        req.onerror = () => alert('重置失败，请手动清除浏览器数据');
-                    } catch(e) {
-                        alert('重置失败: ' + e.message);
-                    }
-                }
-            };
+            this._showFatalError(err);
         }
     }
 
     /**
+     * 展示致命错误页
+     */
+    _showFatalError(err) {
+        const errMsg = err.message || String(err);
+        this.container.innerHTML = 
+            '<div style="text-align:center;padding:80px 20px;">' +
+            '<div style="font-size:48px;margin-bottom:16px;">💥</div>' +
+            '<h2>启动失败</h2>' +
+            '<p style="color:var(--text-muted);margin-top:8px;font-size:14px;">' + errMsg + '</p>' +
+            '<div style="margin-top:20px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">' +
+            '<button onclick="location.reload()" class="btn btn-primary">🔄 重新加载</button>' +
+            '<button onclick="window._resetDB()" class="btn btn-danger">🗑️ 重置数据库</button>' +
+            '</div>' +
+            '<div style="margin-top:20px;padding:12px;background:var(--bg-secondary);border-radius:8px;font-size:12px;color:var(--text-muted);text-align:left;max-width:400px;margin-left:auto;margin-right:auto;">' +
+            '<div><strong>可能的原因：</strong></div>' +
+            '<div>1. 请确保通过 http://localhost:3000 访问（不要直接双击 html 文件）</div>' +
+            '<div>2. 浏览器不支持 IndexedDB（请使用 Chrome/Edge 最新版）</div>' +
+            '<div>3. 如果问题持续，请点击「重置数据库」</div>' +
+            '<div>4. 查看控制台(F12 → Console)获取详细错误信息</div>' +
+            '</div></div>';
+        
+        window._resetDB = async function() {
+            if (confirm('确定要重置数据库吗？所有数据将被清除！')) {
+                try {
+                    const req = indexedDB.deleteDatabase('WordWizDB');
+                    req.onsuccess = () => {
+                        window.Toast.show('✅ 数据库已重置，即将刷新...');
+                        setTimeout(() => location.reload(), 1000);
+                    };
+                    req.onerror = () => alert('重置失败，请手动清除浏览器数据');
+                } catch(e) {
+                    alert('重置失败: ' + e.message);
+                }
+            }
+        };
+    }
+
+    /**
      * 配置导航按钮
+     * 
+     * 点击逻辑：
+     * - 不同页面 → 更新 hash，由 hashchange 事件驱动渲染
+     * - 相同页面 → 直接调用 _renderPage 强制刷新（绕过 hash 机制）
      */
     _setupNavigation() {
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const page = btn.dataset.page;
                 
-                // 更新导航激活状态
+                // 更新导航激活状态（先于渲染完成）
                 document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
 
-                // 更新 hash
-                window.location.hash = '#/' + page;
-
-                // 直接渲染（即使点击的是同一页面也强制刷新）
-                this._renderPage(page);
+                if (page === this.currentPage) {
+                    // 相同页面 → 直接强制重渲染
+                    this._renderPage(page);
+                } else {
+                    // 不同页面 → 设置 hash，由 hashchange 触发渲染
+                    window.location.hash = '#/' + page;
+                }
             });
         });
     }
@@ -133,29 +147,47 @@ class WordWizApp {
     }
 
     /**
-     * 处理路由变化
+     * 处理 hashchange 事件（浏览器前进/后退）
+     * 
+     * 注意：导航按钮点击已不再触发这个路径（相同页面直接渲染，不同页面设 hash 触发）。
+     * 此方法仅处理浏览器的前进/后退操作。
      */
     async _handleRoute() {
         const page = this._getPageFromHash() || 'home';
+        // 如果 hash 变化后的页面就是当前页，不需要重新渲染
+        //（导航按钮的同页面点击不走 hashchange，而是直接调用 _renderPage）
         if (page === this.currentPage) return;
         await this._renderPage(page);
     }
 
     /**
-     * 渲染指定页面
+     * 渲染指定页面（核心渲染方法）
      */
     async _renderPage(page) {
-        this.currentPage = page;
+        // 防止并发渲染
+        if (this._rendering) {
+            console.log('⏳ 正在渲染中，跳过重复请求:', page);
+            return;
+        }
+        this._rendering = true;
 
-        // 更新导航高亮
-        document.querySelectorAll('.nav-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.page === page);
-        });
-
-        // 淡出
-        this.container.classList.remove('page-fade-in');
-        
         try {
+            this.currentPage = page;
+
+            // 更新导航高亮（如果 hash 变化了而导航没更新）
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.page === page);
+            });
+
+            // 同步 hash（不触发 hashchange，因为用的是 replace）
+            const expectedHash = '#/' + page;
+            if (window.location.hash !== expectedHash) {
+                history.replaceState(null, '', expectedHash);
+            }
+
+            // 淡出
+            this.container.classList.remove('page-fade-in');
+            
             // 渲染页面（带防御检查）
             switch (page) {
                 case 'home':
@@ -171,6 +203,9 @@ class WordWizApp {
                     if (typeof SettingsPage?.render === 'function') await SettingsPage.render(this.container);
                     break;
             }
+
+            // 淡入动画
+            setTimeout(() => this.container.classList.add('page-fade-in'), 50);
         } catch (e) {
             console.error('页面渲染失败:', page, e);
             this.container.innerHTML = `
@@ -181,10 +216,9 @@ class WordWizApp {
                     <button onclick="location.reload()" class="btn btn-primary" style="margin-top:16px;">🔄 重新加载</button>
                 </div>
             `;
+        } finally {
+            this._rendering = false;
         }
-
-        // 淡入动画
-        setTimeout(() => this.container.classList.add('page-fade-in'), 50);
     }
 }
 

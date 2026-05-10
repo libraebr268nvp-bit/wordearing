@@ -4,6 +4,9 @@
  * v3 新增：
  * - 顶部搜索框（模糊搜索 + 定位单元）
  * - 按词书过滤（读取 active_books 设置）
+ * v4 新增：
+ * - 全局混序：打乱单元顺序 + 打乱每个单元内的单词
+ * - 恢复按钮还原为原始单元顺序
  */
 
 class HomePage {
@@ -11,6 +14,9 @@ class HomePage {
         container.innerHTML = `
             <div class="page-header">
                 <div class="page-title">📚 学习</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button id="globalShuffleBtn" class="btn btn-sm btn-primary">🔀 全局混序</button>
+                </div>
             </div>
             <!-- 搜索框 -->
             <div class="search-bar" style="padding:0 16px 12px;">
@@ -39,9 +45,27 @@ class HomePage {
         // 分类筛选
         const filterContainer = container.querySelector('#categoryFilter');
         CategoryFilter.render(filterContainer, '全部', async (category) => {
+            HomePage._shuffled = false;
             await this._renderUnits(container, category);
         });
 
+        // 全局混序按钮
+        const shuffleBtn = container.querySelector('#globalShuffleBtn');
+        if (shuffleBtn) {
+            shuffleBtn.addEventListener('click', async () => {
+                HomePage._shuffled = !HomePage._shuffled;
+                shuffleBtn.textContent = HomePage._shuffled ? '🔁 恢复' : '🔀 全局混序';
+                if (HomePage._shuffled) {
+                    window.Toast.show('🔀 已全局混序');
+                } else {
+                    window.Toast.show('已恢复原始顺序');
+                }
+                await this._renderUnits(container,
+                    container.querySelector('.filter-btn.active')?.textContent || '全部');
+            });
+        }
+
+        HomePage._shuffled = false;
         await this._renderUnits(container, '全部');
     }
 
@@ -164,6 +188,7 @@ class HomePage {
                     b.style.color = isActive ? 'var(--accent-blue)' : 'var(--text-secondary)';
                 });
                 // 刷新单词列表
+                HomePage._shuffled = false;
                 await this._renderUnits(pageContainer, pageContainer.querySelector('.filter-btn.active')?.textContent || '全部');
             });
         });
@@ -193,13 +218,31 @@ class HomePage {
         }
 
         // 按单元分组
-        const unitMap = {};
+        let unitMap = {};
         words.forEach(w => {
             if (!unitMap[w.unit]) unitMap[w.unit] = [];
             unitMap[w.unit].push(w);
         });
 
-        const units = Object.keys(unitMap).sort((a, b) => parseInt(a) - parseInt(b));
+        // 取单元列表
+        let units = Object.keys(unitMap).sort((a, b) => parseInt(a) - parseInt(b));
+
+        // 如果全局混序，打乱单元顺序 + 打乱每个单元内的单词
+        if (HomePage._shuffled) {
+            // Fisher-Yates 打乱单元顺序
+            for (let i = units.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [units[i], units[j]] = [units[j], units[i]];
+            }
+            // 打乱每个单元内的单词
+            for (const u of units) {
+                const arr = unitMap[u];
+                for (let i = arr.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [arr[i], arr[j]] = [arr[j], arr[i]];
+                }
+            }
+        }
 
         unitsContainer.innerHTML = '';
         // 保存单元映射到容器（供搜索定位使用）
@@ -211,11 +254,16 @@ class HomePage {
                     // 重新渲染当前页（收藏、熟悉度、删除后刷新统计和收藏夹）
                     await HomePage._renderUnits(container,
                         container.querySelector('.filter-btn.active')?.textContent || '全部');
-                }
+                },
+                // 在全局混序模式下，单元内的单词已经预先打乱了，但保留 UnitCard 自身的混序按钮
+                preShuffled: HomePage._shuffled
             });
             unitsContainer.appendChild(card);
         });
     }
 }
+
+// 全局混序状态
+HomePage._shuffled = false;
 
 window.HomePage = HomePage;
