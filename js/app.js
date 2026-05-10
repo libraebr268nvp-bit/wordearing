@@ -153,20 +153,32 @@ class WordWizApp {
         // 淡出
         this.container.classList.remove('page-fade-in');
         
-        // 渲染页面
-        switch (page) {
-            case 'home':
-                await HomePage.render(this.container);
-                break;
-            case 'favorites':
-                await FavoritesPage.render(this.container);
-                break;
-            case 'trash':
-                await TrashPage.render(this.container);
-                break;
-            case 'settings':
-                await SettingsPage.render(this.container);
-                break;
+        try {
+            // 渲染页面（带防御检查）
+            switch (page) {
+                case 'home':
+                    if (typeof HomePage?.render === 'function') await HomePage.render(this.container);
+                    break;
+                case 'favorites':
+                    if (typeof FavoritesPage?.render === 'function') await FavoritesPage.render(this.container);
+                    break;
+                case 'trash':
+                    if (typeof TrashPage?.render === 'function') await TrashPage.render(this.container);
+                    break;
+                case 'settings':
+                    if (typeof SettingsPage?.render === 'function') await SettingsPage.render(this.container);
+                    break;
+            }
+        } catch (e) {
+            console.error('页面渲染失败:', page, e);
+            this.container.innerHTML = `
+                <div style="text-align:center;padding:80px 20px;">
+                    <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
+                    <h2>页面加载失败</h2>
+                    <p style="color:var(--text-muted);font-size:13px;">${e.message}</p>
+                    <button onclick="location.reload()" class="btn btn-primary" style="margin-top:16px;">🔄 重新加载</button>
+                </div>
+            `;
         }
 
         // 淡入动画

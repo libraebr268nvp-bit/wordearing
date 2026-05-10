@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#1E1E2E" />
     <meta name="description" content="WordWiz - 跨平台单词学习 App" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>WordWiz · 单词学习</title>
     
     <!-- 内联 SVG favicon，避免浏览器 404 请求 -->
@@ -59,25 +62,25 @@
     <!-- ====== Toast 通知 ====== -->
     <div id="toastContainer"></div>
 
-    <!-- ====== JavaScript 模块 ====== -->
+    <!-- ====== JavaScript 模块（v=2 防浏览器缓存，改文件后同步递增） ====== -->
     <!-- 模型 -->
-    <script src="js/models/word.js"></script>
+    <script src="js/models/word.js?v=2"></script>
     <!-- 数据库 -->
-    <script src="js/db.js"></script>
+    <script src="js/db.js?v=2"></script>
     <!-- 工具类 -->
-    <script src="js/utils/parser.js"></script>
-    <script src="js/utils/notifications.js"></script>
-    <script src="js/utils/stats.js"></script>
+    <script src="js/utils/parser.js?v=2"></script>
+    <script src="js/utils/notifications.js?v=2"></script>
+    <script src="js/utils/stats.js?v=2"></script>
     <!-- 页面组件 -->
-    <script src="js/widgets/categoryFilter.js"></script>
-    <script src="js/widgets/wordCard.js"></script>
-    <script src="js/widgets/unitCard.js"></script>
+    <script src="js/widgets/categoryFilter.js?v=2"></script>
+    <script src="js/widgets/wordCard.js?v=2"></script>
+    <script src="js/widgets/unitCard.js?v=2"></script>
     <!-- 页面 -->
-    <script src="js/screens/home.js"></script>
-    <script src="js/screens/favorites.js"></script>
-    <script src="js/screens/trash.js"></script>
-    <script src="js/screens/settings.js"></script>
+    <script src="js/screens/home.js?v=2"></script>
+    <script src="js/screens/favorites.js?v=2"></script>
+    <script src="js/screens/trash.js?v=2"></script>
+    <script src="js/screens/settings.js?v=2"></script>
     <!-- 主入口 -->
-    <script src="js/app.js"></script>
+    <script src="js/app.js?v=2"></script>
 </body>
 </html>
