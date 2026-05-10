@@ -34,8 +34,7 @@ class NotificationHelper {
             : '今天的单词都已掌握，明天继续加油！';
         
         new Notification(title, {
-            body: body,
-            icon: '/assets/icon-192.png'
+            body: body
         });
     }
 

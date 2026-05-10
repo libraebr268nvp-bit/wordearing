@@ -207,7 +207,11 @@ class HomePage {
 
         units.forEach(unit => {
             const card = UnitCard.render(parseInt(unit), unitMap[unit], {
-                onUpdate: () => {}
+                onUpdate: async () => {
+                    // 重新渲染当前页（收藏、熟悉度、删除后刷新统计和收藏夹）
+                    await HomePage._renderUnits(container,
+                        container.querySelector('.filter-btn.active')?.textContent || '全部');
+                }
             });
             unitsContainer.appendChild(card);
         });
