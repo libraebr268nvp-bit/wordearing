@@ -1,374 +1,238 @@
-# WordWiz · 单词学习工具 项目文档
+# WordWiz 项目文档
 
-**版本：** v1.0.0  
-**最后更新：** 2026年5月10日  
-**项目定位：** 纯离线·本地优先·跨平台单词学习应用
+> 跨平台单词学习 App · 纯前端本地离线版（IndexedDB + Hash 路由）
 
 ---
 
-## 一、项目简介
-
-WordWiz 是一款**纯前端、本地离线**的单词学习工具。
-
-- 所有数据（单词库、学习进度、收藏、设置）均存储在**浏览器的 IndexedDB** 中
-- **无需注册登录**，打开即用，隐私安全
-- 支持 **PWA 安装**（未来扩展），可添加到手机/电脑桌面
-- 深色科技感 UI，适配桌面端和移动端
-
-### 核心特性
-
-| 特性 | 说明 |
-|------|------|
-| 🏠 **本地存储** | 数据在浏览器本地，不依赖网络，无隐私泄露 |
-| 📚 **多词书管理** | 支持四级、六级、自定义词书，可开关选择 |
-| ⭐ **收藏夹** | 标记重点单词，集中复习 |
-| 🗑️ **回收站** | 软删除机制，误删可恢复，30天自动清理 |
-| 📊 **学习统计** | 单词总数、平均熟悉度、7天学习趋势图 |
-| 🔔 **每日提醒** | 定时推送复习通知（基于 Web Notification） |
-| 📥 **导入/导出** | 支持 CSV/JSON 格式导入导出，可互通其他工具 |
-
----
-
-## 二、项目架构
-
-### 2.1 目录结构
+## 一、项目结构
 
 ```
-wordlearing/
-├── index.html              # 入口页面
-├── start.bat               # Windows 启动脚本
+d:\gxj\code\wordlearing/
+├── index.html                 # 主入口 HTML
+├── start.bat                  # 启动脚本（npx http-server -c-1）
+├── server.py                  # Python 版开发服务器（已弃用）
+│
 ├── css/
-│   └── style.css           # 全局样式（深色主题）
+│   └── style.css              # 全局样式
+│
 ├── js/
-│   ├── app.js              # 主入口 - 初始化、路由、Toast
-│   ├── db.js               # IndexedDB DAO 层 - 数据库操作
+│   ├── app.js                 # ★ 主入口：初始化DB + 路由 + Toast
+│   ├── db.js                  # ★ 数据库层：IndexedDB DAO
+│   │
 │   ├── models/
-│   │   └── word.js         # 单词数据模型
+│   │   └── word.js            # 数据模型：WordModel.create/fromRow
+│   │
 │   ├── screens/
-│   │   ├── home.js         # 主学习页面
-│   │   ├── favorites.js    # 收藏夹页面
-│   │   ├── trash.js        # 回收站页面
-│   │   └── settings.js     # 设置页面（导入/导出/统计）
-│   ├── utils/
-│   │   ├── parser.js       # CSV/JSON 词库解析
-│   │   ├── stats.js        # 学习统计 + Chart.js 图表
-│   │   └── notifications.js # 每日提醒通知
+│   │   ├── home.js            # 首页：学习页（搜索+词书过滤+单元展示）
+│   │   ├── favorites.js       # 收藏夹：独立展示收藏单词
+│   │   ├── trash.js           # 回收站：软删除/恢复/永久删除
+│   │   └── settings.js        # 设置：词书管理/导入导出/提醒/统计
+│   │
 │   ├── widgets/
-│   │   ├── categoryFilter.js # 分类筛选组件
-│   │   ├── unitCard.js      # 单元卡片组件
-│   │   └── wordCard.js      # 单词卡片组件
-│   └── lib/
-│       └── chart.umd.min.js # Chart.js 图表库
+│   │   ├── categoryFilter.js  # 分类筛选组件（全部/四级/六级/半导体专业/其他）
+│   │   ├── unitCard.js        # 单元卡片组件（折叠+混序）
+│   │   └── wordCard.js        # 单词卡片组件（熟悉/收藏/删除按钮）
+│   │
+│   └── utils/
+│       ├── parser.js          # 导入导出工具（CSV/JSON解析）
+│       ├── notifications.js   # 桌面通知提醒
+│       └── stats.js           # 统计图表（Chart.js）
+│
 ├── assets/
-│   ├── words_cet4.json     # 四级词库（≈2000词）
-│   ├── words_cet6.json     # 六级词库（≈2000词）
+│   ├── words_cet4.json        # 四级词库数据文件
+│   ├── words_cet6.json        # 六级词库数据文件
 │   └── .gitkeep
+│
 └── docs/
-    └── project_overview.md # 本文档
+    └── project_overview.md    # 本文档
 ```
-
-### 2.2 架构分层
-
-```
-┌──────────────────────────────────┐
-│           HTML 入口              │
-│          index.html              │
-├──────────────────────────────────┤
-│         路由调度                  │
-│        app.js (WordWizApp)       │
-├──────┬──────┬──────┬──────┬──────┤
-│ Home │Fav.  │ Trash│Setting│ .... │
-│(学习)│(收藏) │(回收站)│(设置) │      │
-├──────┴──────┴──────┴──────┴──────┤
-│          Widget 组件层            │
-│  CategoryFilter / UnitCard /     │
-│  WordCard                        │
-├──────────────────────────────────┤
-│         数据模型层                │
-│      WordModel (单词模型)         │
-├──────────────────────────────────┤
-│         数据库 DAO 层             │
-│   WordDatabase (IndexedDB 封装)  │
-├──────────────────────────────────┤
-│         工具层                    │
-│  Parser / Stats / Notifications  │
-└──────────────────────────────────┘
-```
-
-### 2.3 模块职责
-
-| 模块 | 文件 | 职责 |
-|------|------|------|
-| **主入口** | `js/app.js` | 应用初始化、数据库连接、预置数据、Hash 路由、页面切换、Toast 通知 |
-| **数据库** | `js/db.js` | IndexedDB 封装，CRUD 操作，预置 200 个四级单词，批量操作，统计查询 |
-| **数据模型** | `js/models/word.js` | 单词对象结构定义，熟悉度标签映射，数据库行→对象转换 |
-| **学习页** | `js/screens/home.js` | 分类筛选、单元卡片分组展示、单词操作（熟悉/收藏/删除） |
-| **收藏夹** | `js/screens/favorites.js` | 收藏单词列表，排序（按时间/熟悉度/字母） |
-| **回收站** | `js/screens/trash.js` | 已删除单词列表，恢复/永久删除操作 |
-| **设置页** | `js/screens/settings.js` | 统计仪表盘、导入/导出、清空回收站、每日提醒/时间设置 |
-| **词库解析** | `js/utils/parser.js` | CSV/JSON 解析，重复检测，导出功能 |
-| **统计工具** | `js/utils/stats.js` | Chart.js 图表渲染，学习趋势绘制 |
-| **通知工具** | `js/utils/notifications.js` | 每日复习提醒，权限请求，定时检查 |
 
 ---
 
-## 三、数据库设计
+## 二、逻辑框架
 
-### 3.1 IndexedDB 结构
+### 2.1 技术栈
 
-**数据库名：** `WordWizDB`  
-**版本号：** `2`
+| 技术 | 用途 |
+|------|------|
+| 纯 HTML + CSS + JS | 无框架，零依赖 |
+| IndexedDB | 本地数据库（浏览器持久存储） |
+| Hash 路由 (`#/page`) | 页面切换，无需后端 |
+| Chart.js | 学习趋势图表 |
+| Web Notifications API | 每日复习提醒 |
+| WebRTC | 获取局域网 IP |
 
-#### 表：`words`（单词表）
+### 2.2 数据流
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `id` | `number` (自增主键) | 唯一标识 |
-| `word` | `string` | 英文单词 |
-| `definition` | `string` | 中文释义（含词性） |
-| `category` | `string` | 分类：四级/六级/其他 |
-| `unit` | `number` | 所属单元（1, 2, 3...） |
-| `familiarity` | `number (0-5)` | 熟悉度，0=陌生，5=掌握 |
-| `is_favorite` | `boolean` | 是否收藏 |
-| `book_source` | `string` | 来源词书名称 |
-| `deleted_at` | `string/null` | 软删除时间戳，null=未删除 |
-| `created_at` | `string` | 创建时间 ISO 字符串 |
+```
+用户操作 → Hash 路由变化 → app.js 调度 → 对应 Page.render()
+                                                    ↓
+                                              调用 WordDB (db.js)
+                                                    ↓
+                                              IndexedDB CRUD
+                                                    ↓
+                                              获取数据 → 渲染 DOM
+```
 
-**索引：** word, category, unit, is_favorite, deleted_at, familiarity
+### 2.3 数据库结构（IndexedDB）
 
-#### 表：`settings`（设置表）
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `key` | `string` (主键) | 设置键名 |
-| `value` | `any` | 设置值 |
-
-**常用设置项：** reminder_enabled, reminder_time, reminder_last_sent, active_books
-
-#### 表：`stats`（学习统计表）
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `id` | `number` (自增主键) | 唯一标识 |
-| `date` | `string` | 学习日期 YYYY-MM-DD |
-| `word` | `string` | 学习的单词 |
-| `category` | `string` | 单词分类 |
-| `type` | `string` | 事件类型（"familiar"） |
-| `timestamp` | `string` | 时间戳 |
+| 表名 | keyPath | 说明 |
+|------|---------|------|
+| `words` | `id` (autoIncrement) | 单词表：word, definition, category, unit, book_id, familiarity(0-5), is_favorite, deleted_at |
+| `books` | `id` (autoIncrement) | 词书表：name, description, is_system, created_at |
+| `settings` | `key` | 键值对设置：active_books, reminder_enabled, reminder_time 等 |
+| `stats` | `id` (autoIncrement) | 学习统计：date, word, category, type, timestamp |
 
 ---
 
-## 四、功能介绍
+## 三、功能清单
 
-### 4.1 主学习页（首页）
+### ✅ 已实现功能
 
-- **分类筛选**：全部 / 四级 / 六级 / 其他
-- **单元卡片**：按单元分组（每单元≈100词），可展开/折叠
-- **单词操作**：
-  - 🔄 **熟悉**（绿色按钮）：提升熟悉度 +1（上限5）
-  - ⭐ **收藏**（黄色按钮）：切换收藏状态
-  - 🗑️ **删除**（红色按钮）：移入回收站
-- **熟悉度指示器**：5个小圆点，绿色表示已掌握程度
-- **混序排列**：每个单元内可打乱顺序
+| 功能 | 文件 | 说明 |
+|------|------|------|
+| **首页学习** | `home.js` | 按单元展示单词卡片 |
+| **分类筛选** | `categoryFilter.js` | 全部/四级/六级/半导体专业/其他 |
+| **词书筛选** | `home.js` | 在设置中勾选激活的词书 |
+| **模糊搜索** | `home.js` | 300ms 防抖，匹配单词和释义，点击定位到单元 |
+| **单元展开/折叠** | `unitCard.js` | 点击单元标题展开/收起 |
+| **Fisher-Yates 混序** | `unitCard.js` | 点击「混序」打乱，再点「恢复」还原 |
+| **熟悉度系统** | `wordCard.js` | 0-5 级，点击 ✓ 增加，圆点显示 |
+| **收藏/取消收藏** | `wordCard.js` | ⭐ 按钮切换，无需确认 |
+| **收藏夹** | `favorites.js` | 独立展示所有收藏单词（不受词书过滤影响） |
+| **收藏夹排序** | `favorites.js` | 默认/熟悉度升序/降序/混序 |
+| **回收站** | `trash.js` | 软删除 → 30天自动清理 |
+| **恢复单词** | `trash.js` | 从回收站恢复到原词书 |
+| **词书管理** | `settings.js` | 新增/删除/勾选词书 |
+| **导入词库** | `settings.js` + `parser.js` | 支持 CSV/JSON，自动创建词书 |
+| **导出数据** | `settings.js` + `parser.js` | 导出 JSON/CSV |
+| **学习趋势图** | `stats.js` | 最近 7 天学习次数折线图 |
+| **每日提醒** | `notifications.js` | 桌面通知，可设时间 |
+| **局域网访问** | `settings.js` | 自动获取 IP |
 
-### 4.2 收藏夹
+### ❌ 未实现（后续规划）
 
-- 显示所有收藏的单词
-- 三种排序方式：按收藏时间 / 按熟悉度 / 按字母
-- 移除收藏、删除操作
+| 功能 | 说明 |
+|------|------|
+| **按熟悉度排序**（单元内） | 当前仅收藏夹支持，单元卡片内未有此按钮 |
+| **跨单元随机抽词复习** | 从多个单元随机抽取单词复习 |
+| **顶部搜索** | ✅ **已完成**（搜索框在首页顶部） |
+| **分类动态读取** | 当前硬编码 ['全部', '四级', '六级', '半导体专业', '其他'] |
 
-### 4.3 回收站
+---
 
-- 显示软删除的单词
-- 可恢复单词（回到主学习页）
-- 可永久删除
-- 数据保留30天后自动清理
+## 四、已修复的 Bug
 
-### 4.4 设置页
+### v3 P0 修复（commit 65d6e0b）
 
-- **📊 统计仪表盘**：总单词数、平均熟悉度、收藏数、回收站词数、7天学习趋势图
-- **📥 导入词库**：支持 CSV（UTF-8）和 JSON 格式
-  - 自动去重检测（重复单词可选择覆盖或跳过）
-  - 导入结果显示成功数、跳过数、错误信息
-- **📤 导出数据**：导出全部单词为 JSON 或 CSV
-- **🗑️ 清空回收站**：永久删除回收站所有单词
-- **🔔 每日复习提醒**：
-  - 开启/关闭提醒
-  - 设置提醒时间（默认 20:00）
-  - 提醒熟悉度低于3的单词
-- **ℹ️ 关于**：版本信息
+| Bug | 文件 | 描述 |
+|-----|------|------|
+| 1 | `favorites.js` | 收藏夹被 `activeBookIds` 词书过滤，去掉该参数 |
+| 2 | `favorites.js` | `familiarity` 为 undefined 时排序产生 NaN，加 `?? 0` |
+| 3 | `favorites.js` | 脏数据跳过导致空列表白屏，加空状态检查 |
+| 4 | `unitCard.js` | `dataset.id` 不存在时 `parseInt` 返回 NaN，加 `Number.isFinite` |
+| 5 | `app.js` | `_renderPage` 无 try-catch 导致崩溃白屏 |
+| 6 | `index.html` | 无防缓存头，浏览器缓存旧 JS |
 
-### 4.5 导入词库格式说明
+### 已知问题
 
-#### JSON 格式
-```json
-[
-  {
-    "word": "abandon",
-    "definition": "v. 放弃；遗弃",
-    "category": "四级",
-    "unit": 1
-  },
-  {
-    "word": "ability",
-    "definition": "n. 能力；才能",
-    "category": "四级",
-    "unit": 1
-  }
-]
+| 问题 | 状态 | 说明 |
+|------|------|------|
+| **点击同一导航按钮不刷新** | 🔴 待修复 | 详见下面「导航 Bug 说明」 |
+| 回收站清空后统计面板未更新 | 🟡 轻微 | 手动刷新页面可解决 |
+| 收藏夹混序状态不持久化 | ✅ 特性 | 符合「混序状态不持久化」规则 |
+| 浏览器缓存旧文件 | ✅ 已修复 | http-server -c-1 + HTML meta no-cache |
+
+---
+
+## 五、导航 Bug 说明
+
+### 问题
+
+当用户导航到某个页面（如收藏夹）后，如果因某种原因页面渲染失败，**再次点击同一按钮无法重新加载**。
+
+### 原因
+
+```javascript
+// app.js - _setupNavigation()
+btn.addEventListener('click', () => {
+    const page = btn.dataset.page;
+    if (page === this.currentPage) return;  // ← 导致同页面无法重试
+    ...
+    window.location.hash = '#/' + page;
+});
 ```
 
-也可以使用包含 `words` 或 `data` 字段的对象：
-```json
-{
-  "words": [
-    { "word": "...", "definition": "...", "category": "...", "unit": 1 }
-  ]
+以及：
+
+```javascript
+// app.js - _handleRoute()
+async _handleRoute() {
+    const page = this._getPageFromHash() || 'home';
+    if (page === this.currentPage) return;  // ← 同上
+    await this._renderPage(page);
 }
 ```
 
-#### CSV 格式
-```csv
-word,definition,category,unit
-abandon,v. 放弃；遗弃,四级,1
-ability,n. 能力；才能,四级,1
-```
+### 修复方向
 
-CSV 要求：
-- 编码：UTF-8（建议带 BOM，以便 Excel 正确识别中文）
-- 第一行为表头：`word,definition,category,unit`
-- 释义中含逗号时，需用双引号包裹：`"v. 跑；逃跑"`
-- 至少包含 word 和 definition 两列
+`_setupNavigation` 中移除 `if (page === this.currentPage) return;`，改为直接调用 `_renderPage(page)` 触发重新渲染。
 
 ---
 
-## 五、使用方式
+## 六、开发指南
 
-### 5.1 启动应用
+### 启动项目
 
-**方式一：Python HTTP 服务器（推荐）**
+**方法 1（推荐）：双击 start.bat**
+```
+d:\gxj\code\wordlearing\start.bat
+```
+
+**方法 2：手动启动**
 ```bash
-cd wordlearing
-python -m http.server 3000
-# 浏览器访问 http://localhost:3000
+cd d:\gxj\code\wordlearing
+npx http-server . -p 3000 -c-1 --cors
 ```
 
-**方式二：Node.js http-server**
+然后浏览器访问：`http://localhost:3000`
+
+### 开发新页面
+
+1. 在 `js/screens/` 下新建 `xxx.js`
+2. 实现 `class XxxPage { static async render(container) { ... } }`
+3. 导出到全局：`window.XxxPage = XxxPage`
+4. 在 `index.html` 中添加 `<script>` 引用（加 `?v=N`）
+5. 在 `app.js` 的 `_renderPage` switch 中注册路由
+
+### 数据库操作
+
+```javascript
+// 读取
+await WordDB.getAllWords()
+await WordDB.getWordsByCategory('四级', [1, 2])
+await WordDB.getFavoriteWords('全部')
+
+// 写入
+await WordDB.addWord({ word: 'hello', definition: '你好', ... })
+await WordDB.updateWord(id, { familiarity: 3 })
+await WordDB.toggleFavorite(id)
+await WordDB.softDeleteWord(id)
+```
+
+### 修改后提交
+
 ```bash
-cd wordlearing
-npx http-server -p 3000 -c-1
-# 浏览器访问 http://localhost:3000
+git add .
+git commit -m "描述改了什么"
 ```
 
-**方式三：双击 start.bat**
+---
+
+## 七、Git 版本记录
+
 ```
-运行后输入 1（Python）/ 2（Node.js）/ 3（npx）
-自动打开 http://localhost:3000
+24b454e fix: 彻底解决缓存问题 + 改用http-server(c-1)
+65d6e0b fix: P0 bugs - 收藏夹词书过滤/排序兜底/空列表检测/NaN容错
+4fbad58 WordWiz v3 initial commit
 ```
-
-**⚠️ 重要：** 必须通过 HTTP 服务器访问（`http://localhost:3000`），直接双击 HTML 文件会导致 IndexedDB 无法正常工作。
-
-### 5.2 首次使用
-
-1. 启动服务器后访问 `http://localhost:3000`
-2. 浏览器会自动创建 IndexedDB 数据库
-3. 内置 200 个预置四级单词（2 单元，各 100 词）
-4. 自动开启每日提醒检查
-
-### 5.3 导入词库
-
-1. 进入「设置」页
-2. 点击 **「选择文件导入」** 按钮
-3. 选择 `.json` 或 `.csv` 文件
-4. 如有重复单词，弹窗提示选择「覆盖释义」或「跳过」
-5. 导入完成后显示成功/跳过/错误统计
-6. 返回「学习」页即可看到新单词
-
-### 5.4 学习流程
-
-1. **首页** → 选择分类（全部/四级/六级）
-2. **点击单元卡片** → 展开单词列表
-3. **操作单词**：
-   - 点击 ✅ 按钮 → 熟悉度 +1，计入今日学习统计
-   - 点击 ⭐ 按钮 → 收藏/取消收藏
-   - 点击 🗑️ 按钮 → 移入回收站
-4. **查看进度** → 设置页统计仪表盘查看学习趋势
-5. **复习提醒** → 每天指定时间自动推送通知
-
-### 5.5 数据管理
-
-- **导出备份**：设置页导出 JSON/CSV，定期备份
-- **恢复数据**：通过导入功能恢复
-- **重置数据库**：页面底部「重置数据库」按钮（出现错误时使用）
-
----
-
-## 六、技术栈
-
-| 技术 | 用途 | 版本 |
-|------|------|------|
-| **HTML5** | 页面结构 | - |
-| **CSS3** | 深色主题样式、动画、响应式布局 | - |
-| **JavaScript (ES6+)** | 全部业务逻辑，模块化 | - |
-| **IndexedDB** | 浏览器本地数据库（离线持久存储） | 浏览器原生 API |
-| **Chart.js** | 学习趋势图表绘制 | 4.4.0 |
-| **Web Notifications API** | 桌面通知推送 | 浏览器原生 API |
-| **Hash Router** | 前端路由（#/home, #/favorites...） | 自实现 |
-
-### 架构特点
-
-- **纯前端架构**：无需后端服务器（需要 HTTP 服务器仅为提供静态文件）
-- **离线可用**：一次加载后，即使断网也可正常使用
-- **数据隐私**：所有数据存储在用户本地，不经过任何网络传输
-- **单一入口**：所有页面由 JavaScript 动态渲染，SPA 体验
-- **面向对象**：使用 Class 组织代码，DAO 模式封装数据库操作
-
----
-
-## 七、常见问题
-
-### Q1: 启动报错 "Key already exists in the object store"
-
-**原因：** `WordModel.create()` 创建新单词时 id 字段处理不当，导致批量写入主键冲突
-
-**解决方案（v1.0.0 已修复）：**
-- 新单词对象不再包含 `id` 字段
-- 由 IndexedDB 的 `autoIncrement` 自动生成唯一 ID
-
-### Q2: 启动后页面空白或报错
-
-可能原因：
-1. 直接双击了 `index.html` 文件 → **必须通过 `http://localhost:3000` 访问**
-2. 浏览器版本过低 → 使用 Chrome/Edge 最新版
-3. 数据库损坏 → 点击「重置数据库」按钮
-
-### Q3: 如何备份数据？
-
-设置页 → 导出 JSON → 保存文件到安全位置。需要恢复时导入即可。
-
-### Q4: 如何在不同电脑间同步数据？
-
-当前版本为纯本地应用，不同电脑数据不互通。如需同步可：
-1. 手动导出 JSON → 传到另一台电脑 → 导入
-2. 等待后续版本增加云端同步功能
-
----
-
-## 八、未来扩展计划
-
-| 优先级 | 功能 | 说明 |
-|--------|------|------|
-| 🔴 P0 | ~~启动 Bug 修复~~ | ✅ 已完成 |
-| 🔴 P0 | 词书管理系统 | 设置页选择当前使用的词书 |
-| 🔴 P0 | 四六级词库 | 预置 2000+ 四级词 + 2000+ 六级词 |
-| 🟡 P1 | 导入预览/审核 | 导入前预览列表，标记重复 |
-| 🟡 P1 | 可视化奖惩 | 连胜计数、成就徽章、每日目标 |
-| 🟢 P2 | PWA 安装 | manifest.json + Service Worker |
-| 🟢 P2 | 发音功能 | Web Speech API 朗读 |
-| 🔵 P3 | 游戏化学习 | 拼写测试、卡片翻转 |
-| 🔵 P3 | 间隔重复 | Anki 算法复习 |
-| 🟣 P4 | 云端同步 | 加后端，多设备数据同步 |
-
----
-
-*文档版本：v1.0 · 2026年5月10日*

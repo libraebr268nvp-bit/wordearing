@@ -109,7 +109,6 @@ class WordWizApp {
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const page = btn.dataset.page;
-                if (page === this.currentPage) return;
                 
                 // 更新导航激活状态
                 document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -117,6 +116,9 @@ class WordWizApp {
 
                 // 更新 hash
                 window.location.hash = '#/' + page;
+
+                // 直接渲染（即使点击的是同一页面也强制刷新）
+                this._renderPage(page);
             });
         });
     }
