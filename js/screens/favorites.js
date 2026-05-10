@@ -76,9 +76,8 @@ class FavoritesPage {
         listContainer.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)">⏳ 加载中...</div>';
 
         try {
-            // 获取已激活词书 ID
-            const activeBookIds = await WordDB.getActiveBookIds();
-            let words = await WordDB.getFavoriteWords(this.currentCategory, activeBookIds);
+            // 收藏夹不过滤词书，展示所有收藏的单词
+            let words = await WordDB.getFavoriteWords(this.currentCategory);
 
             if (!words || words.length === 0) {
                 listContainer.innerHTML = `
@@ -93,11 +92,11 @@ class FavoritesPage {
                 return;
             }
 
-            // 排序
+            // 排序（处理 familiarity 为 undefined 的情况）
             if (this.currentSort === 'asc') {
-                words.sort((a, b) => a.familiarity - b.familiarity);
+                words.sort((a, b) => (a.familiarity ?? 0) - (b.familiarity ?? 0));
             } else if (this.currentSort === 'desc') {
-                words.sort((a, b) => b.familiarity - a.familiarity);
+                words.sort((a, b) => (b.familiarity ?? 0) - (a.familiarity ?? 0));
             }
 
             // 混序
@@ -134,6 +133,21 @@ class FavoritesPage {
             }
             
             wrapper.appendChild(list);
+
+            // Bug 3 修复：所有单词都是脏数据被跳过时，显示空状态
+            if (list.children.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">⭐</div>
+                        <div class="empty-text">暂无有效收藏</div>
+                        <p style="color:var(--text-muted);font-size:13px;margin-top:8px;">
+                            收藏的单词数据异常，请尝试重新收藏
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+
             listContainer.appendChild(wrapper);
         } catch (e) {
             console.error('收藏夹渲染失败:', e);

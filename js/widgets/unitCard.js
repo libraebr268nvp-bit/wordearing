@@ -71,15 +71,20 @@ class UnitCard {
                 card._shuffled = false;
                 shuffleBtn.textContent = '🔀 混序';
                 items.sort((a, b) => {
-                    const idxA = card._originalOrder.indexOf(parseInt(a.dataset.id));
-                    const idxB = card._originalOrder.indexOf(parseInt(b.dataset.id));
-                    return idxA - idxB;
+                    const idA = Number(a.dataset.id);
+                    const idB = Number(b.dataset.id);
+                    const idxA = Number.isFinite(idA) ? card._originalOrder.indexOf(idA) : -1;
+                    const idxB = Number.isFinite(idB) ? card._originalOrder.indexOf(idB) : -1;
+                    return (idxA === -1 ? 9999 : idxA) - (idxB === -1 ? 9999 : idxB);
                 });
                 window.Toast.show('已恢复原始顺序');
             } else {
                 // 保存原始顺序
                 if (!card._originalOrder) {
-                    card._originalOrder = items.map(item => parseInt(item.dataset.id));
+                    card._originalOrder = items.map(item => {
+                        const id = Number(item.dataset.id);
+                        return Number.isFinite(id) ? id : -1;
+                    }).filter(id => id >= 0);
                 }
                 // Fisher-Yates 洗牌算法
                 for (let i = items.length - 1; i > 0; i--) {
