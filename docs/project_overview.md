@@ -121,62 +121,132 @@ d:\gxj\code\wordlearing/
 
 ---
 
-## 四、已修复的 Bug
+## 四、Bug 全量分析
 
-### v3 P0 修复（commit 65d6e0b）
+### 4.1 已修复的 Bug
 
-| Bug | 文件 | 描述 |
-|-----|------|------|
-| 1 | `favorites.js` | 收藏夹被 `activeBookIds` 词书过滤，去掉该参数 |
-| 2 | `favorites.js` | `familiarity` 为 undefined 时排序产生 NaN，加 `?? 0` |
-| 3 | `favorites.js` | 脏数据跳过导致空列表白屏，加空状态检查 |
-| 4 | `unitCard.js` | `dataset.id` 不存在时 `parseInt` 返回 NaN，加 `Number.isFinite` |
-| 5 | `app.js` | `_renderPage` 无 try-catch 导致崩溃白屏 |
-| 6 | `index.html` | 无防缓存头，浏览器缓存旧 JS |
+#### commit 65d6e0b — P0 修复
 
-### 已知问题
+| ID | 文件 | 严重级 | 问题 | 修复 |
+|----|------|--------|------|------|
+| B1 | `favorites.js` | P0 🔴 | 收藏夹传了 `activeBookIds` 参数，导致词书未勾选时收藏单词不显示 | 去掉 `getFavoriteWords(category, activeBookIds)` 的第二个参数 |
+| B2 | `favorites.js` | P0 🔴 | 部分数据 `familiarity` 为 undefined，排序产生 NaN 导致渲染崩溃 | `a.familiarity ?? 0` 兜底 |
+| B3 | `favorites.js` | P0 🔴 | 脏数据跳过时 `list.children.length === 0`，页面空白 | 加空列表检查，显示占位提示 |
+| B4 | `unitCard.js` | P0 🔴 | `dataset.id` 不存在时 `parseInt` 返回 NaN，排序崩溃 | `Number.isFinite(id)` 检查 |
+| B5 | `app.js` | P0 🔴 | `_renderPage` 无 try-catch，任一页面报错导致整个应用白屏 | 包 try-catch + 友好错误提示 |
+| B6 | `index.html` | P0 🔴 | 浏览器缓存旧 JS 文件，代码改了但运行时还是旧的 | 加 `<meta>` no-cache + `?v=2` + http-server `-c-1` |
 
-| 问题 | 状态 | 说明 |
-|------|------|------|
-| **点击同一导航按钮不刷新** | 🔴 待修复 | 详见下面「导航 Bug 说明」 |
-| 回收站清空后统计面板未更新 | 🟡 轻微 | 手动刷新页面可解决 |
-| 收藏夹混序状态不持久化 | ✅ 特性 | 符合「混序状态不持久化」规则 |
-| 浏览器缓存旧文件 | ✅ 已修复 | http-server -c-1 + HTML meta no-cache |
+#### commit 36b7b09 — 导航修复
+
+| ID | 文件 | 严重级 | 问题 | 修复 |
+|----|------|--------|------|------|
+| B7 | `app.js` | P0 🔴 | 导航按钮点击时 `if (page === this.currentPage) return;` 导致同一页面无法重试 | 移除该判断，每次点击直接调 `_renderPage()` |
 
 ---
 
-## 五、导航 Bug 说明
+### 4.2 尚未修复的 Bug（全部代码审查结果）
 
-### 问题
+阅读分析 js 目录下 10 个文件（共约 2400 行）后，识别出以下潜在问题：
 
-当用户导航到某个页面（如收藏夹）后，如果因某种原因页面渲染失败，**再次点击同一按钮无法重新加载**。
+#### P1 — 功能异常（页面能打开但行为错误）
 
-### 原因
+| ID | 文件 | 行 | 问题 | 影响 |
+|----|------|-----|------|------|
+| **B8** | `home.js` | 162-166 | `UnitCard.render()` 传 `onUpdate: () => {}` 空函数，在首页修改熟悉度或删除单词后，**不回调刷新** | 收藏夹/统计面板不会自动更新（需手动 F5） |
+| **B9** | `favorites.js` | 27 | `FavoritesPage` 是实例而非静态类，`CategoryFilter.render` 的回调里 `this._renderFavList(container)` 捕获的是实例 `this`，但多次调用 `render()` 时**分类筛选的回调叠加** | 每次切换页面再回来，分类按钮点击会触发 N 次 `_renderFavList` |
+| **B10** | `db.js` | 39-42 | `onupgradeneeded` 中给旧 words 表创建 `book_id` 索引时，如果表版本已升级到 v3 但 book_id 索引已存在，**重复创建会抛异常** | 首次升级报错可能导致页面空白（需手动重置数据库） |
+| **B11** | `db.js` | 237-248 | `_addBatch` 中 for 循环 + 异步回调，如果某条记录写入失败，Promise **既可能 resolve 也可能不 resolve** | 种子数据 200 词写入时若有一条失败，整个 Promise 挂起 |
 
-```javascript
-// app.js - _setupNavigation()
-btn.addEventListener('click', () => {
-    const page = btn.dataset.page;
-    if (page === this.currentPage) return;  // ← 导致同页面无法重试
-    ...
-    window.location.hash = '#/' + page;
-});
+#### P2 — 体验优化（不影响核心功能）
+
+| ID | 文件 | 行 | 问题 | 影响 |
+|----|------|-----|------|------|
+| B12 | `home.js` | 96 | 搜索框点击外部关闭，但同时监听了 `document` 的 click，**点击搜索结果项也会触发关闭事件**（关闭在前，定位在后） | 第一次点击搜索词可能在定位前被关闭 |
+| B13 | `settings.js` | 22 | 导入时新建词书后，用 `confirm()` 询问是否覆盖，如果用户不点确定/取消**后续导入会卡住** | 体验不流畅 |
+| B14 | `settings.js` | 186 | `reminder_last_sent` 存的是日期字符串 YYYY-MM-DD，**但日期计算用的是本地时区** | 跨时区用可能有偏差 |
+| B15 | `db.js` | 254-274 | `_getAllRaw` 的 onerror 分支用 `store.openCursor()` 全表扫描作为降级，但如果 store 未正确获取，`openCursor` 也会报错 | 降级失败无二次容错 |
+
+#### P3 — 代码质量问题（不影响运行）
+
+| ID | 文件 | 行 | 问题 |
+|----|------|-----|------|
+| B16 | `categoryFilter.js` | 8 | 分类数组 `['全部', '四级', '六级', '半导体专业', '其他']` 硬编码，不随数据库中真实分类动态生成 |
+| B17 | `notifications.js` | 13 | `icon: '/assets/icon-192.png'` 引用了不存在的路径（项目没有这个文件），通知图标不会显示 |
+| B18 | `settings.js` | 170 | 局域网 IP 获取使用 RTCPeerConnection，但有 3s 超时，如果用户网络环境不允许 WebRTC，显示的文字是英文提示 |
+| B19 | `favorites.js` | 76-101 | `_renderFavList` 中 `wrapper.className = 'unit-card'` 用了 unit-card 的样式类名，但 favList 本身不是单元，依赖 unit-card 的 CSS 样式类 |
+
+---
+
+### 4.3 收藏夹功能特别分析
+
+收藏夹的全链路代码已在 `docs/favorites_analysis.md` 中逐文件提取。
+
+#### 收藏夹数据流
+
+```
+点击 ⭐ (wordCard.js)
+  → WordDB.toggleFavorite(id)  → IndexedDB put
+  → onUpdate() 回调 → 刷新列表
+
+点击导航「收藏」 (app.js)
+  → _renderPage('favorites')
+  → FavoritesPage.render(container)
+  → WordDB.getFavoriteWords(category)
+  → 拿到所有 is_favorite=true 的单词
+  → 渲染 DOM
+
+点击删除 ✕ (wordCard.js)
+  → WordDB.softDeleteWord(id)  → 设 deleted_at + is_favorite=false
+  → onUpdate() 回调 → 刷新列表
 ```
 
-以及：
+#### 收藏夹的防御层
 
-```javascript
-// app.js - _handleRoute()
-async _handleRoute() {
-    const page = this._getPageFromHash() || 'home';
-    if (page === this.currentPage) return;  // ← 同上
-    await this._renderPage(page);
-}
+| 防御 | 位置 | 说明 |
+|------|------|------|
+| try-catch | `_renderFavList` | 整个渲染过程包 try-catch |
+| 空列表检测 | `_renderFavList` | words=0 或全脏数据跳过后显示空状态 |
+| 脏数据跳过 | `_renderFavList` | `if (!word \|\| !word.word) continue` |
+| 排序兜底 | `_renderFavList` | `?? 0` 处理 undefined |
+| 不传词书 ID | `_renderFavList` | `getFavoriteWords(category)` 无第二个参数 |
+| 实例方法 | `FavoritesPage` | 非静态类，状态可持久 |
+
+#### 收藏夹仍然打不开的排障清单
+
+**前提条件：**
+1. ✅ 服务器正确运行 `http-server . -p 3000 -c-1`（看控制台有没有输出）
+2. ✅ 浏览器通过 `http://localhost:3000` 访问（不是双击 html）
+3. ✅ 刷新页面（F5），不是只改 URL hash
+4. ✅ 清浏览器缓存（F12 → 网络 → 勾选「禁用缓存」→ 刷新）
+
+**如果以上都满足，以下步骤：**
+1. F12 打开控制台 → 看有没有报错
+2. F12 → 网络标签 → 看 `favorites.js?v=2` 有没有加载成功（200）
+3. 控制台输入 `!!window.FavoritesPage` → 应该是 `true`
+4. 控制台输入 `typeof FavoritesPage.render === 'function'` → 应该是 `true`
+5. 控制台输入 `await WordDB.getFavoriteWords('全部')` → 看返回是否为空数组
+6. 如果为空 → 控制台输入 `await WordDB.getSetting('active_books', null)` → 看有没有异常
+7. 如果上一步有问题 → 点「重置数据库」
+
+---
+
+## 五、导航系统说明
+
+### 路由机制
+
+```
+Hash 路由: #/home, #/favorites, #/trash, #/settings
 ```
 
-### 修复方向
+### 触发重新渲染的三种方式
 
-`_setupNavigation` 中移除 `if (page === this.currentPage) return;`，改为直接调用 `_renderPage(page)` 触发重新渲染。
+| 方式 | 触发链路 | 说明 |
+|------|----------|------|
+| 点击导航按钮 | → `_setupNavigation` → `_renderPage(page)` | 已修复：现在每次都强制刷新 |
+| 浏览器前进/后退 | → `hashchange` 事件 → `_handleRoute` → `_renderPage(page)` | 有 `if (page === this.currentPage) return;` 防抖 |
+| 直接改 URL hash | → 同上 | 同上 |
+
+**注意：** `_handleRoute` 中仍保留 `if (page === this.currentPage) return;` 是因为 `hashchange` 可能被重复触发（浏览器兼容性）。如果你手动改 hash 为相同值，它不会重新渲染。
 
 ---
 
