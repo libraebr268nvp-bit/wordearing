@@ -5,12 +5,14 @@
  * - 词书筛选
  * - 分类筛选
  * - 搜索单词
- * - 全局混序/恢复
+ * - 6 种排序模式：默认顺序、熟悉度从高到低、熟悉度从低到高、
+ *   字母 A-Z、字母 Z-A、随机混序
  * 
- * v5 重写：
- * - 混序结果存储在 AppState.home.unitOrder / wordOrders
- * - onUpdate 按存储的排列重渲染，不重新随机
- * - 分类/词书切换时重置混序
+ * v6 重写：
+ * - 新增排序选择器
+ * - 非默认排序时打平成单词列表（不按单元分组）
+ * - 混序结果存储在 AppState.home.shuffledWords
+ * - onUpdate 按当前排序模式重新排列
  */
 
 class HomePage {
@@ -20,7 +22,7 @@ class HomePage {
                 <div class="page-title">📚 学习</div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;">
                     <button id="globalShuffleBtn" class="btn btn-sm btn-primary">
-                        ${AppState.home.shuffled ? '🔁 恢复' : '🔀 全局混序'}
+                        ${HomeShuffle.isShuffled() ? '🔁 恢复' : '🔀 全局混序'}
                     </button>
                 </div>
             </div>
@@ -38,6 +40,7 @@ class HomePage {
             </div>
             <div id="bookFilter"></div>
             <div id="categoryFilter"></div>
+            <div id="sortSelector"></div>
             <div id="wordUnits"></div>
         `;
 
@@ -54,43 +57,62 @@ class HomePage {
             await this._renderUnits(container);
         });
 
+        // 排序选择器
+        this._renderSortSelector(container);
+
         // 全局混序按钮
         const shuffleBtn = container.querySelector('#globalShuffleBtn');
         shuffleBtn.addEventListener('click', async () => {
-            AppState.home.shuffled = !AppState.home.shuffled;
-            shuffleBtn.textContent = AppState.home.shuffled ? '🔁 恢复' : '🔀 全局混序';
-            if (AppState.home.shuffled) {
-                // 生成混序排列
-                await this._generateShuffle(container);
-                window.Toast.show('🔀 已全局混序');
-            } else {
+            if (HomeShuffle.isShuffled()) {
                 this._resetShuffle();
+                shuffleBtn.textContent = '🔀 全局混序';
                 window.Toast.show('已恢复原始顺序');
+            } else {
+                const words = await this._getAllWords();
+                HomeShuffle.setMode('shuffled', words);
+                shuffleBtn.textContent = '🔁 恢复';
+                const activeBtn = container.querySelector('#sortSelector .sort-btn.active');
+                if (activeBtn) activeBtn.classList.remove('active');
+                const shuffledBtn = container.querySelector('#sortSelector .sort-btn[data-sort="shuffled"]');
+                if (shuffledBtn) shuffledBtn.classList.add('active');
+                window.Toast.show('🔀 已全局混序');
             }
             await this._renderUnits(container);
         });
 
-        // 首次渲染
         await this._renderUnits(container);
     }
 
-    /**
-     * 重置混序状态（委托 HomeShuffle）
-     */
+    static async _getAllWords() {
+        const activeBookIds = await WordDB.getActiveBookIds();
+        const category = AppState.home.category;
+        return await WordDB.getWordsByCategory(category, activeBookIds);
+    }
+
+    static _renderSortSelector(container) {
+        const sortContainer = container.querySelector('#sortSelector');
+        sortContainer.innerHTML = WordSorter.renderSelector(AppState.home.sortMode || 'default');
+        WordSorter.bindSelector(sortContainer, async (mode) => {
+            AppState.home.sortMode = mode;
+            AppState.home.shuffledWords = null;
+            const shuffleBtn = document.getElementById('globalShuffleBtn');
+            if (shuffleBtn) {
+                shuffleBtn.textContent = mode === 'shuffled' ? '🔁 恢复' : '🔀 全局混序';
+            }
+            if (mode === 'shuffled') {
+                const words = await this._getAllWords();
+                AppState.home.shuffledWords = WordSorter.shuffle(words).map(w => w.id);
+            }
+            await this._renderUnits(container);
+        });
+    }
+
     static _resetShuffle() {
         HomeShuffle.reset();
+        const shuffleBtn = document.getElementById('globalShuffleBtn');
+        if (shuffleBtn) shuffleBtn.textContent = '🔀 全局混序';
     }
 
-    /**
-     * 生成混序排列（委托 HomeShuffle）
-     */
-    static async _generateShuffle(container) {
-        await HomeShuffle.generate();
-    }
-
-    /**
-     * 设置搜索功能
-     */
     static _setupSearch(container) {
         const input = container.querySelector('#searchInput');
         const resultBox = container.querySelector('#searchResults');
@@ -153,9 +175,6 @@ class HomePage {
         });
     }
 
-    /**
-     * 渲染词书筛选器
-     */
     static async _renderBookFilter(container) {
         const bookContainer = container.querySelector('#bookFilter');
         const books = await WordDB.getBooks();
@@ -184,11 +203,8 @@ class HomePage {
             btn.addEventListener('click', async () => {
                 const bid = parseInt(btn.dataset.bookId);
                 const idx = activeIds.indexOf(bid);
-                if (idx >= 0) {
-                    activeIds.splice(idx, 1);
-                } else {
-                    activeIds.push(bid);
-                }
+                if (idx >= 0) activeIds.splice(idx, 1);
+                else activeIds.push(bid);
                 if (activeIds.length === 0) {
                     window.Toast.show('至少保留一个词书');
                     return;
@@ -200,16 +216,12 @@ class HomePage {
                     b.style.background = isActive ? 'rgba(108,140,255,0.15)' : 'transparent';
                     b.style.color = isActive ? 'var(--accent-blue)' : 'var(--text-secondary)';
                 });
-                // 词书切换 → 重置混序
                 this._resetShuffle();
                 await this._renderUnits(container);
             });
         });
     }
 
-    /**
-     * 渲染单词单元列表
-     */
     static async _renderUnits(container) {
         const unitsContainer = container.querySelector('#wordUnits');
         if (!unitsContainer) return;
@@ -233,35 +245,79 @@ class HomePage {
             return;
         }
 
-        // 按单元分组
+        const mode = AppState.home.sortMode || 'default';
+        if (mode === 'default') {
+            this._renderByUnit(unitsContainer, words);
+        } else {
+            this._renderFlatList(unitsContainer, words, mode);
+        }
+    }
+
+    static _renderByUnit(container, words) {
         const unitMap = {};
         words.forEach(w => {
             if (!unitMap[w.unit]) unitMap[w.unit] = [];
             unitMap[w.unit].push(w);
         });
 
-        // 确定单元顺序（委托 HomeShuffle）
-        const units = HomeShuffle.getOrderedUnits(Object.keys(unitMap));
-
-        unitsContainer.innerHTML = '';
-        unitsContainer._unitMap = unitMap;
+        const units = Object.keys(unitMap).sort((a, b) => parseInt(a) - parseInt(b));
+        container.innerHTML = '';
 
         units.forEach(unit => {
             let unitWords = unitMap[unit] || [];
-
-            // 按混序排列获取单词顺序（委托 HomeShuffle）
-            unitWords = HomeShuffle.getOrderedWords(unitWords, unit);
-
             const card = UnitCard.render(parseInt(unit), unitWords, {
                 onUpdate: async () => {
-                    // 重新渲染（保持混序排列不变）
-                    await this._renderUnits(container);
+                    const mode = AppState.home.sortMode || 'default';
+                    const allWords = await this._getAllWords();
+                    if (mode === 'default') this._renderByUnit(container, allWords);
+                    else this._renderFlatList(container, allWords, mode);
                 },
-                // 全局混序时隐藏单元混序按钮
-                hideShuffle: AppState.home.shuffled
+                hideShuffle: false
             });
-            unitsContainer.appendChild(card);
+            container.appendChild(card);
         });
+    }
+
+    static _renderFlatList(container, words, mode) {
+        let sorted;
+        if (mode === 'shuffled' && AppState.home.shuffledWords) {
+            sorted = WordSorter.sort(words, 'shuffled', AppState.home.shuffledWords);
+        } else {
+            sorted = WordSorter.sort(words, mode);
+        }
+
+        container.innerHTML = '';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'unit-card';
+
+        const sortLabels = {
+            'fam-high': '熟悉度从高到低',
+            'fam-low': '熟悉度从低到高',
+            'alpha-asc': '字母 A→Z',
+            'alpha-desc': '字母 Z→A',
+            'shuffled': '随机混序'
+        };
+
+        const header = document.createElement('div');
+        header.className = 'unit-header';
+        header.innerHTML = `<div class="unit-title">📖 ${sortLabels[mode] || '排序'} <span class="unit-count">· ${sorted.length} 词</span></div>`;
+        wrapper.appendChild(header);
+
+        const list = document.createElement('div');
+        list.className = 'word-list';
+        sorted.forEach(word => {
+            const wordRow = WordCard.render(word, {
+                onUpdate: async () => {
+                    const mode = AppState.home.sortMode || 'default';
+                    const allWords = await this._getAllWords();
+                    if (mode === 'default') this._renderByUnit(container, allWords);
+                    else this._renderFlatList(container, allWords, mode);
+                }
+            });
+            if (wordRow) list.appendChild(wordRow);
+        });
+        wrapper.appendChild(list);
+        container.appendChild(wrapper);
     }
 }
 

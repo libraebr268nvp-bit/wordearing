@@ -27,14 +27,14 @@ window.Toast = {
 // 所有页面的临时 UI 状态放在这里，切换页面不丢失
 window.AppState = {
     home: {
-        shuffled: false,
-        unitOrder: null,       // null=默认顺序，否则为打乱后的单元编号数组
-        wordOrders: {}         // { unit编号: [打乱后的单词ID顺序] }
+        category: '全部',      // 当前分类筛选
+        sortMode: 'default',   // default | fam-high | fam-low | alpha-asc | alpha-desc | shuffled
+        shuffledWords: null    // shuffled 模式下存储打乱后的单词 ID 数组（null=还未生成）
     },
     favorites: {
         category: '全部',
-        sort: 'default',
-        shuffled: false
+        sortMode: 'default',   // default | fam-high | fam-low | alpha-asc | alpha-desc | shuffled
+        shuffledWords: null    // shuffled 模式下存储的 ID 顺序
     }
 };
 
