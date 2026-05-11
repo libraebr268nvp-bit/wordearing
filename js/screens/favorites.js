@@ -7,61 +7,58 @@
  * - 按熟悉度排序（升序/降序）
  * - 混序学习按钮
  * 
- * v3 修复：
- * - 增加 try-catch 容错，防止脏数据导致白屏
- * - 独立渲染，不依赖单元结构
- * - 数据容错兜底
+ * v5 重写：
+ * - 从实例单例改为静态类（与其他页面一致）
+ * - 状态使用 AppState.favorites
  */
 
 class FavoritesPage {
-    constructor() {
-        this.currentCategory = '全部';
-        this.currentSort = 'default';
-        this.shuffled = false;
-    }
-
-    async render(container) {
+    static async render(container) {
         container.innerHTML = `
             <div class="page-header">
                 <div class="page-title">⭐ 收藏夹</div>
                 <div>
                     <button class="btn btn-sm btn-primary" id="shuffleFavBtn">
-                        🔀 混序学习
+                        ${AppState.favorites.shuffled ? '🔁 恢复顺序' : '🔀 混序学习'}
                     </button>
                 </div>
             </div>
             <div id="favCategoryFilter"></div>
             <div class="sort-group">
                 <span class="sort-label">排序：</span>
-                <button class="sort-btn active" data-sort="default">默认</button>
-                <button class="sort-btn" data-sort="asc">熟悉度 ↑</button>
-                <button class="sort-btn" data-sort="desc">熟悉度 ↓</button>
+                <button class="sort-btn ${AppState.favorites.sort === 'default' ? 'active' : ''}" data-sort="default">默认</button>
+                <button class="sort-btn ${AppState.favorites.sort === 'asc' ? 'active' : ''}" data-sort="asc">熟悉度 ↑</button>
+                <button class="sort-btn ${AppState.favorites.sort === 'desc' ? 'active' : ''}" data-sort="desc">熟悉度 ↓</button>
             </div>
             <div id="favList"></div>
         `;
 
+        // 分类筛选
         const filterContainer = container.querySelector('#favCategoryFilter');
-        CategoryFilter.render(filterContainer, '全部', (category) => {
-            this.currentCategory = category;
+        CategoryFilter.render(filterContainer, AppState.favorites.category, (category) => {
+            AppState.favorites.category = category;
             this._renderFavList(container);
         });
 
+        // 排序按钮
         container.querySelectorAll('.sort-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 container.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                this.currentSort = btn.dataset.sort;
-                this.shuffled = false;
-                document.getElementById('shuffleFavBtn').textContent = '🔀 混序学习';
+                AppState.favorites.sort = btn.dataset.sort;
+                AppState.favorites.shuffled = false;
+                const shuffleBtn = document.getElementById('shuffleFavBtn');
+                if (shuffleBtn) shuffleBtn.textContent = '🔀 混序学习';
                 this._renderFavList(container);
             });
         });
 
+        // 混序按钮
         const shuffleBtn = document.getElementById('shuffleFavBtn');
         if (shuffleBtn) {
             shuffleBtn.addEventListener('click', () => {
-                this.shuffled = !this.shuffled;
-                shuffleBtn.textContent = this.shuffled ? '🔁 恢复顺序' : '🔀 混序学习';
+                AppState.favorites.shuffled = !AppState.favorites.shuffled;
+                shuffleBtn.textContent = AppState.favorites.shuffled ? '🔁 恢复顺序' : '🔀 混序学习';
                 this._renderFavList(container);
             });
         }
@@ -69,15 +66,14 @@ class FavoritesPage {
         await this._renderFavList(container);
     }
 
-    async _renderFavList(container) {
+    static async _renderFavList(container) {
         const listContainer = container.querySelector('#favList');
         if (!listContainer) return;
         
         listContainer.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)">⏳ 加载中...</div>';
 
         try {
-            // 收藏夹不过滤词书，展示所有收藏的单词
-            let words = await WordDB.getFavoriteWords(this.currentCategory);
+            let words = await WordDB.getFavoriteWords(AppState.favorites.category);
 
             if (!words || words.length === 0) {
                 listContainer.innerHTML = `
@@ -92,22 +88,22 @@ class FavoritesPage {
                 return;
             }
 
-            // 排序（处理 familiarity 为 undefined 的情况）
-            if (this.currentSort === 'asc') {
+            // 排序
+            if (AppState.favorites.sort === 'asc') {
                 words.sort((a, b) => (a.familiarity ?? 0) - (b.familiarity ?? 0));
-            } else if (this.currentSort === 'desc') {
+            } else if (AppState.favorites.sort === 'desc') {
                 words.sort((a, b) => (b.familiarity ?? 0) - (a.familiarity ?? 0));
             }
 
             // 混序
-            if (this.shuffled) {
+            if (AppState.favorites.shuffled) {
                 for (let i = words.length - 1; i > 0; i--) {
                     const j = Math.floor(Math.random() * (i + 1));
                     [words[i], words[j]] = [words[j], words[i]];
                 }
             }
 
-            // 构建列表 - 独立布局，不依赖 unitCard
+            // 构建列表
             listContainer.innerHTML = '';
             const wrapper = document.createElement('div');
             wrapper.className = 'unit-card';
@@ -122,7 +118,7 @@ class FavoritesPage {
             
             for (const word of words) {
                 try {
-                    if (!word || !word.word) continue; // 跳过脏数据
+                    if (!word || !word.word) continue;
                     const wordRow = WordCard.render(word, {
                         onUpdate: () => this._renderFavList(container)
                     });
@@ -134,7 +130,6 @@ class FavoritesPage {
             
             wrapper.appendChild(list);
 
-            // Bug 3 修复：所有单词都是脏数据被跳过时，显示空状态
             if (list.children.length === 0) {
                 listContainer.innerHTML = `
                     <div class="empty-state">
@@ -164,4 +159,4 @@ class FavoritesPage {
     }
 }
 
-window.FavoritesPage = new FavoritesPage();
+window.FavoritesPage = FavoritesPage;
