@@ -122,11 +122,13 @@ body::before {
     justify-content: space-between;
     padding: 8px 16px;
     height: 56px;
+    position: relative;
 }
 .nav-brand {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
 }
 .brand-icon { font-size: 24px; }
 .brand-text {
@@ -137,7 +139,7 @@ body::before {
     -webkit-text-fill-color: transparent;
     background-clip: text;
 }
-.nav-links {
+.nav-menu {
     display: flex;
     gap: 4px;
 }
@@ -146,13 +148,14 @@ body::before {
     align-items: center;
     gap: 6px;
     padding: 6px 14px;
-    border: 1px solid transparent;
+    border: none;
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text-secondary);
     font-size: 13px;
     cursor: pointer;
     transition: var(--transition);
+    position: relative;
 }
 .nav-btn:hover {
     background: var(--bg-hover);
@@ -160,15 +163,97 @@ body::before {
 }
 .nav-btn.active {
     background: rgba(108, 140, 255, 0.12);
-    border-color: rgba(108, 140, 255, 0.3);
     color: var(--accent-blue);
-    box-shadow: var(--glow-blue);
+}
+/* 高亮底部荧光条（桌面） */
+.nav-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 2px;
+    background: var(--accent-blue);
+    border-radius: 2px;
+    box-shadow: 0 0 6px rgba(108, 140, 255, 0.6);
 }
 .nav-icon { font-size: 16px; }
-.nav-label { }
+
+/* 汉堡按钮 - 桌面隐藏 */
+.nav-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 20px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+.nav-toggle:hover {
+    background: var(--bg-hover);
+}
+.nav-toggle.open {
+    background: var(--bg-hover);
+    border-color: var(--accent-blue);
+}
+
+/* ========== 移动端导航折叠 ========== */
+@media (max-width: 768px) {
+    .nav-toggle {
+        display: flex;
+    }
+    .nav-menu {
+        display: none;
+        position: absolute;
+        top: 56px;
+        left: 0;
+        right: 0;
+        background: rgba(30, 30, 46, 0.97);
+        backdrop-filter: blur(16px);
+        flex-direction: column;
+        padding: 6px 0;
+        border-bottom: 1px solid var(--border-color);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        gap: 0;
+    }
+    .nav-menu.open {
+        display: flex;
+    }
+    .nav-btn {
+        padding: 12px 20px;
+        border-radius: 0;
+        border: none;
+        border-left: 3px solid transparent;
+        font-size: 14px;
+        gap: 10px;
+    }
+    .nav-btn:hover {
+        background: var(--bg-hover);
+    }
+    .nav-btn.active {
+        background: rgba(108, 140, 255, 0.08);
+        border-left-color: var(--accent-blue);
+    }
+    /* 移动端底部荧光条去掉（改用左边条） */
+    .nav-btn.active::after {
+        display: none;
+    }
+    .nav-icon {
+        font-size: 18px;
+        width: 24px;
+        text-align: center;
+    }
+}
 @media (max-width: 480px) {
-    .nav-label { display: none; }
-    .nav-btn { padding: 6px 10px; }
+    .nav-btn {
+        padding: 14px 20px;
+    }
 }
 
 /* ====== 主内容区域 ====== */

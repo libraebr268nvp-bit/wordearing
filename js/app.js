@@ -135,23 +135,43 @@ class WordWizApp {
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const page = btn.dataset.page;
-                
-                // 更新导航激活状态
-                document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-
-                // 获取当前页面
                 const currentHash = window.location.hash.replace('#/', '');
                 
                 if (page === currentHash) {
-                    // 相同页面 → 直接渲染（hashchange 不会触发）
                     this._renderPage(page);
                 } else {
-                    // 不同页面 → 设 hash，由 hashchange 驱动渲染
                     window.location.hash = '#/' + page;
                 }
+                // 移动端：点击导航后关闭菜单
+                this._closeNavMenu();
             });
         });
+
+        // 汉堡菜单切换
+        const toggleBtn = document.getElementById('navToggle');
+        const navMenu = document.getElementById('navMenu');
+        if (toggleBtn && navMenu) {
+            toggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                navMenu.classList.toggle('open');
+                toggleBtn.classList.toggle('open');
+            });
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('#topNav')) {
+                    this._closeNavMenu();
+                }
+            });
+        }
+    }
+
+    /**
+     * 关闭移动端导航菜单
+     */
+    _closeNavMenu() {
+        const navMenu = document.getElementById('navMenu');
+        const toggleBtn = document.getElementById('navToggle');
+        if (navMenu) navMenu.classList.remove('open');
+        if (toggleBtn) toggleBtn.classList.remove('open');
     }
 
     /**
