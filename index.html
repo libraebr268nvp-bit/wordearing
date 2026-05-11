@@ -42,9 +42,17 @@
                     <span class="nav-icon">⭐</span>
                     <span class="nav-label">收藏</span>
                 </button>
+                <button class="nav-btn" data-page="wrong-words" title="错题集">
+                    <span class="nav-icon">📝</span>
+                    <span class="nav-label">错题</span>
+                </button>
                 <button class="nav-btn" data-page="trash" title="回收站">
                     <span class="nav-icon">🗑️</span>
                     <span class="nav-label">回收站</span>
+                </button>
+                <button class="nav-btn" data-page="challenge" title="挑战模式">
+                    <span class="nav-icon">🎯</span>
+                    <span class="nav-label">挑战</span>
                 </button>
                 <button class="nav-btn" data-page="settings" title="设置">
                     <span class="nav-icon">⚙️</span>
@@ -64,22 +72,31 @@
 
     <!-- ====== JavaScript 模块（v=5 防浏览器缓存，改文件后同步递增） ====== -->
     <!-- 模型 -->
-    <script src="js/models/word.js?v=5"></script>
-    <!-- 数据库 -->
-    <script src="js/db.js?v=5"></script>
+    <script src="js/models/word.js?v=6"></script>
+    <!-- 数据库连接层 + DAO（按依赖顺序：基类 → 各DAO → 实例化） -->
+    <script src="js/db/connection.js?v=6"></script>
+    <script src="js/db/settings.dao.js?v=6"></script>
+    <script src="js/db/stats.dao.js?v=6"></script>
+    <script src="js/db/books.dao.js?v=6"></script>
+    <script src="js/db/words.dao.js?v=6"></script>
+    <script src="js/db/index.js?v=6"></script>
     <!-- 工具类 -->
     <script src="js/utils/parser.js?v=5"></script>
     <script src="js/utils/notifications.js?v=5"></script>
     <script src="js/utils/stats.js?v=5"></script>
+    <script src="js/utils/achievements.js?v=1"></script>
     <!-- 页面组件 -->
     <script src="js/widgets/categoryFilter.js?v=5"></script>
     <script src="js/widgets/wordCard.js?v=5"></script>
     <script src="js/widgets/unitCard.js?v=5"></script>
     <!-- 页面 -->
-    <script src="js/screens/home.js?v=5"></script>
+    <script src="js/screens/home/shuffle.js?v=6"></script>
+    <script src="js/screens/home.js?v=6"></script>
     <script src="js/screens/favorites.js?v=5"></script>
     <script src="js/screens/trash.js?v=5"></script>
     <script src="js/screens/settings.js?v=5"></script>
+    <script src="js/screens/challenge.js?v=1"></script>
+    <script src="js/screens/wrongwords.js?v=1"></script>
     <!-- 主入口 -->
     <script src="js/app.js?v=5"></script>
 </body>

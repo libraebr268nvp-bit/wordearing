@@ -159,7 +159,7 @@ class WordWizApp {
      */
     _getPageFromHash() {
         const hash = window.location.hash.replace('#/', '');
-        const validPages = ['home', 'favorites', 'trash', 'settings'];
+        const validPages = ['home', 'favorites', 'trash', 'settings', 'challenge', 'wrong-words'];
         return validPages.includes(hash) ? hash : null;
     }
 
@@ -210,6 +210,12 @@ class WordWizApp {
                     break;
                 case 'settings':
                     if (typeof SettingsPage?.render === 'function') await SettingsPage.render(this.container);
+                    break;
+                case 'challenge':
+                    if (typeof ChallengePage?.render === 'function') await ChallengePage.render(this.container);
+                    break;
+                case 'wrong-words':
+                    if (typeof WrongWordsPage?.render === 'function') await WrongWordsPage.render(this.container);
                     break;
             }
 

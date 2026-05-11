@@ -75,50 +75,17 @@ class HomePage {
     }
 
     /**
-     * 重置混序状态
+     * 重置混序状态（委托 HomeShuffle）
      */
     static _resetShuffle() {
-        AppState.home.shuffled = false;
-        AppState.home.unitOrder = null;
-        AppState.home.wordOrders = {};
+        HomeShuffle.reset();
     }
 
     /**
-     * 生成混序排列（不修改数据，只生成排列顺序）
+     * 生成混序排列（委托 HomeShuffle）
      */
     static async _generateShuffle(container) {
-        const activeBookIds = await WordDB.getActiveBookIds();
-        const category = AppState.home.category;
-        const words = await WordDB.getWordsByCategory(category, activeBookIds);
-
-        if (words.length === 0) return;
-
-        // 按单元分组
-        const unitMap = {};
-        words.forEach(w => {
-            if (!unitMap[w.unit]) unitMap[w.unit] = [];
-            unitMap[w.unit].push(w);
-        });
-
-        // 打乱单元顺序
-        const units = Object.keys(unitMap).sort((a, b) => parseInt(a) - parseInt(b));
-        for (let i = units.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [units[i], units[j]] = [units[j], units[i]];
-        }
-        AppState.home.unitOrder = units;
-
-        // 打乱每个单元内的单词顺序（存单词 id 序列）
-        const wordOrders = {};
-        for (const u of units) {
-            const ids = unitMap[u].map(w => w.id);
-            for (let i = ids.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [ids[i], ids[j]] = [ids[j], ids[i]];
-            }
-            wordOrders[u] = ids;
-        }
-        AppState.home.wordOrders = wordOrders;
+        await HomeShuffle.generate();
     }
 
     /**
@@ -273,13 +240,8 @@ class HomePage {
             unitMap[w.unit].push(w);
         });
 
-        // 确定单元顺序
-        let units;
-        if (AppState.home.shuffled && AppState.home.unitOrder) {
-            units = [...AppState.home.unitOrder];
-        } else {
-            units = Object.keys(unitMap).sort((a, b) => parseInt(a) - parseInt(b));
-        }
+        // 确定单元顺序（委托 HomeShuffle）
+        const units = HomeShuffle.getOrderedUnits(Object.keys(unitMap));
 
         unitsContainer.innerHTML = '';
         unitsContainer._unitMap = unitMap;
@@ -287,19 +249,8 @@ class HomePage {
         units.forEach(unit => {
             let unitWords = unitMap[unit] || [];
 
-            // 如果混序了，按存储的单词顺序排列
-            if (AppState.home.shuffled && AppState.home.wordOrders && AppState.home.wordOrders[unit]) {
-                const orderMap = {};
-                AppState.home.wordOrders[unit].forEach((id, idx) => { orderMap[id] = idx; });
-                unitWords = [...unitWords].sort((a, b) => {
-                    const ia = orderMap[a.id];
-                    const ib = orderMap[b.id];
-                    if (ia !== undefined && ib !== undefined) return ia - ib;
-                    if (ia !== undefined) return -1;
-                    if (ib !== undefined) return 1;
-                    return 0;
-                });
-            }
+            // 按混序排列获取单词顺序（委托 HomeShuffle）
+            unitWords = HomeShuffle.getOrderedWords(unitWords, unit);
 
             const card = UnitCard.render(parseInt(unit), unitWords, {
                 onUpdate: async () => {

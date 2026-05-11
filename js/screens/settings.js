@@ -41,7 +41,10 @@ class SettingsPage {
                         <div class="setting-desc">支持 CSV（UTF-8）或 JSON 格式</div>
                     </div>
                     <input type="file" id="importFileInput" accept=".csv,.json" style="display:none" />
-                    <button class="btn btn-primary btn-sm" id="importBtn">📥 选择文件导入</button>
+                    <div style="display:flex;gap:6px;">
+                        <button class="btn btn-primary btn-sm" id="importBtn">📥 选择文件导入</button>
+                        <button class="btn btn-sm" id="downloadTemplateBtn">📄 下载模板 CSV</button>
+                    </div>
                 </div>
                 <div id="importResult"></div>
 
@@ -125,6 +128,18 @@ class SettingsPage {
         const dashboardContainer = container.querySelector('#statsDashboard');
         await StatsHelper.renderDashboard(dashboardContainer);
 
+        // 成就墙
+        const achievementContainer = document.createElement('div');
+        achievementContainer.id = 'achievementWall';
+        container.insertBefore(achievementContainer, container.querySelector('#bookManagementSection'));
+        await AchievementHelper.renderWall(achievementContainer);
+
+        // 挑战记录
+        const challengeHistoryContainer = document.createElement('div');
+        challengeHistoryContainer.id = 'challengeHistorySection';
+        container.insertBefore(challengeHistoryContainer, container.querySelector('#bookManagementSection'));
+        await this._renderChallengeHistory(challengeHistoryContainer);
+
         // 渲染词书管理
         await this._renderBookManagement(container);
 
@@ -136,6 +151,13 @@ class SettingsPage {
         // 导入
         document.getElementById('importBtn').addEventListener('click', () => {
             document.getElementById('importFileInput').click();
+        });
+
+        // 下载 CSV 模板
+        document.getElementById('downloadTemplateBtn').addEventListener('click', () => {
+            const csv = WordParser.generateTemplateCSV();
+            this._downloadFile(csv, 'wordwiz_template.csv', 'text/csv;charset=utf-8');
+            window.Toast.show('📄 模板已下载');
         });
 
         document.getElementById('importFileInput').addEventListener('change', async (e) => {
@@ -228,6 +250,11 @@ class SettingsPage {
             if (confirm('确定要永久删除回收站中的所有单词吗？')) {
                 const count = await WordDB.clearTrash();
                 window.Toast.show(`🗑️ 已清空 ${count} 个单词`);
+                // 成就：标记清空回收站
+                await AchievementHelper.markTrashCleaned();
+                // 重新渲染成就墙
+                const achievementContainer = container.querySelector('#achievementWall');
+                if (achievementContainer) await AchievementHelper.renderWall(achievementContainer);
                 await StatsHelper.renderDashboard(dashboardContainer);
             }
         });
@@ -335,6 +362,90 @@ class SettingsPage {
                 if (e.key === 'Enter') addBtn.click();
             });
         }
+    }
+
+    /**
+     * 渲染挑战历史记录
+     */
+    static async _renderChallengeHistory(container) {
+        const history = await WordDB.getSetting('challenge_history', []);
+        const challengeCount = await WordDB.getSetting('achievement_challenge_count', 0);
+
+        if (history.length === 0) {
+            container.innerHTML = [
+                '<div class="settings-section">',
+                '<h3>\uD83C\uDFAF 挑战记录</h3>',
+                '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">',
+                '暂无挑战记录，去挑战模式试试吧！',
+                '</div></div>'
+            ].join('');
+            return;
+        }
+
+        // 显示最近的 20 条（倒序）
+        const recent = [...history].reverse().slice(0, 20);
+        const totalChallenges = history.length;
+
+        // 统计汇总
+        const avgCorrect = Math.round(recent.reduce((s, r) => s + r.correct, 0) / recent.length);
+        const avgElapsed = Math.round(recent.reduce((s, r) => s + r.elapsed, 0) / recent.length);
+        const avgPct = Math.round(recent.reduce((s, r) => s + (r.total > 0 ? r.correct / r.total * 100 : 0), 0) / recent.length);
+
+        // 构建列表行
+        const rows = recent.map(r => {
+            const d = new Date(r.date);
+            const MM = d.getMonth() + 1;
+            const DD = d.getDate();
+            const HH = String(d.getHours()).padStart(2, '0');
+            const mm = String(d.getMinutes()).padStart(2, '0');
+            const dateStr = MM + '/' + DD + ' ' + HH + ':' + mm;
+            const pct = r.total > 0 ? Math.round(r.correct / r.total * 100) : 0;
+            const mins = String(Math.floor(r.elapsed / 60)).padStart(2, '0');
+            const secs = String(r.elapsed % 60).padStart(2, '0');
+            const rangeMap = { active: '激活词书', all: '全部词库', category: '按分类' };
+            const pctColor = pct >= 80 ? 'var(--accent-green)' : pct >= 60 ? 'var(--accent-yellow)' : 'var(--accent-red)';
+            
+            return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(58,58,92,0.2);font-size:13px;">' +
+                '<span style="width:70px;color:var(--text-muted);font-size:12px;">' + dateStr + '</span>' +
+                '<span style="flex:1;color:var(--text-secondary);">' + r.correct + '/' + r.total + ' 题</span>' +
+                '<span style="width:44px;text-align:center;font-weight:600;color:' + pctColor + ';">' + pct + '%</span>' +
+                '<span style="width:50px;text-align:right;color:var(--text-muted);font-size:12px;">' + mins + ':' + secs + '</span>' +
+                '<span style="width:60px;text-align:right;color:var(--text-muted);font-size:11px;">' + (rangeMap[r.rangeType] || r.rangeType) + '</span>' +
+                '</div>';
+        });
+
+        container.innerHTML = [
+            '<div class="settings-section">',
+            '<h3>\uD83C\uDFAF 挑战记录</h3>',
+
+            // 汇总
+            '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">',
+            '<div style="background:var(--bg-secondary);padding:10px;border-radius:var(--radius-sm);text-align:center;">',
+            '<div style="font-size:20px;font-weight:700;color:var(--accent-blue);">' + totalChallenges + '</div>',
+            '<div style="font-size:11px;color:var(--text-muted);">总次数</div></div>',
+
+            '<div style="background:var(--bg-secondary);padding:10px;border-radius:var(--radius-sm);text-align:center;">',
+            '<div style="font-size:20px;font-weight:700;color:var(--accent-green);">' + avgPct + '%</div>',
+            '<div style="font-size:11px;color:var(--text-muted);">平均正确率</div></div>',
+
+            '<div style="background:var(--bg-secondary);padding:10px;border-radius:var(--radius-sm);text-align:center;">',
+            '<div style="font-size:20px;font-weight:700;color:var(--accent-yellow);">' + avgCorrect + '</div>',
+            '<div style="font-size:11px;color:var(--text-muted);">平均正确数</div></div>',
+
+            '<div style="background:var(--bg-secondary);padding:10px;border-radius:var(--radius-sm);text-align:center;">',
+            '<div style="font-size:20px;font-weight:700;color:var(--accent-purple);">' + avgElapsed + 's</div>',
+            '<div style="font-size:11px;color:var(--text-muted);">平均用时</div></div>',
+            '</div>',
+
+            // 列表
+            '<div style="max-height:320px;overflow-y:auto;">',
+            rows.join(''),
+            '</div>',
+
+            '<div style="text-align:right;margin-top:8px;font-size:11px;color:var(--text-muted);">',
+            '最近 20 条（共 ' + totalChallenges + ' 条）',
+            '</div></div>'
+        ].join('');
     }
 
     /**

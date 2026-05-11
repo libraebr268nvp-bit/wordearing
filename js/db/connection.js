@@ -1,10 +1,13 @@
 /**
- * WordWiz - IndexedDB 数据库封装（DAO 层）
+ * WordWiz - 数据库连接层
  * 
- * v3 新增：
- * - books 表：管理词书
- * - words 增加 book_id 字段，关联词书
- * - 孤儿数据自动迁移
+ * 负责：
+ * - 打开/升级 IndexedDB
+ * - 创建 4 个对象仓库（words / books / settings / stats）
+ * - 提供底层 CRUD 工具方法（_getStore / _getAll / _add / _delete 等）
+ * - 初始化默认词书 + 预置 200 词 + 孤儿数据迁移
+ * 
+ * 依赖：models/word.js（seedDemoData 中用到 WordModel.create）
  */
 
 class WordDatabase {
@@ -36,15 +39,14 @@ class WordDatabase {
                     this._createStatsStore(db);
                 }
 
-                // v2 升级（如果之前是 v1）
+                // v2 升级（无结构变更）
                 if (oldVersion < 2) {
-                    // 主要是修复 autoIncrement 问题，无结构变更
+                    // 无结构变更
                 }
 
                 // v3 新增 books 表 + words 表加 book_id
                 if (oldVersion < 3) {
                     this._createBookStore(db);
-                    // 给 words 表重建索引（book_id）
                     if (db.objectStoreNames.contains('words')) {
                         const store = event.currentTarget.transaction.objectStore('words');
                         if (!store.indexNames.contains('book_id')) {
@@ -69,9 +71,8 @@ class WordDatabase {
         });
     }
 
-    /**
-     * 创建 words 表
-     */
+    // ===================== 建表 =====================
+
     _createWordStore(db) {
         const store = db.createObjectStore('words', { keyPath: 'id', autoIncrement: true });
         store.createIndex('word', 'word', { unique: false });
@@ -83,37 +84,143 @@ class WordDatabase {
         store.createIndex('familiarity', 'familiarity', { unique: false });
     }
 
-    /**
-     * 创建 settings 表
-     */
     _createSettingsStore(db) {
         db.createObjectStore('settings', { keyPath: 'key' });
     }
 
-    /**
-     * 创建 stats 表
-     */
     _createStatsStore(db) {
         const store = db.createObjectStore('stats', { keyPath: 'id', autoIncrement: true });
         store.createIndex('date', 'date', { unique: false });
         store.createIndex('type', 'type', { unique: false });
     }
 
-    /**
-     * 创建 books 表（v3）
-     */
     _createBookStore(db) {
         const store = db.createObjectStore('books', { keyPath: 'id', autoIncrement: true });
         store.createIndex('name', 'name', { unique: false });
     }
 
+    // ===================== 内部 CRUD 工具方法 =====================
+
+    async _getStore(storeName, mode = 'readonly') {
+        if (!this.db) await this.open();
+        const transaction = this.db.transaction(storeName, mode);
+        return transaction.objectStore(storeName);
+    }
+
+    async _getAll(storeName) {
+        const store = await this._getStore(storeName, 'readonly');
+        return new Promise((resolve, reject) => {
+            const req = store.getAll();
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async _getAllRaw(storeName, filterFn = null) {
+        const store = await this._getStore(storeName, 'readonly');
+        return new Promise((resolve, reject) => {
+            const req = store.getAll();
+            req.onsuccess = () => {
+                let results = req.result || [];
+                if (filterFn) results = results.filter(filterFn);
+                resolve(results);
+            };
+            req.onerror = () => {
+                console.warn('getAllRaw 查询失败，尝试全表扫描:', req.error);
+                const cursorReq = store.openCursor();
+                const results = [];
+                cursorReq.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        results.push(cursor.value);
+                        cursor.continue();
+                    } else {
+                        if (filterFn) {
+                            resolve(results.filter(filterFn));
+                        } else {
+                            resolve(results);
+                        }
+                    }
+                };
+                cursorReq.onerror = () => reject(cursorReq.error);
+            };
+        });
+    }
+
+    async _getByKey(storeName, key) {
+        const store = await this._getStore(storeName, 'readonly');
+        return new Promise((resolve, reject) => {
+            const req = store.get(key);
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async _add(storeName, data) {
+        const store = await this._getStore(storeName, 'readwrite');
+        // 清除 id 让 autoIncrement 自动生成（防止重复 key 冲突）
+        const cleanData = { ...data };
+        if (store.autoIncrement && cleanData.id !== undefined) {
+            delete cleanData.id;
+        }
+        return new Promise((resolve, reject) => {
+            const req = store.put(cleanData);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    async _addBatch(storeName, dataArray) {
+        if (!dataArray || dataArray.length === 0) return 0;
+        const store = await this._getStore(storeName, 'readwrite');
+        return new Promise((resolve, reject) => {
+            let completed = 0;
+            let hasError = false;
+            for (const data of dataArray) {
+                try {
+                    const cleanData = { ...data };
+                    delete cleanData.id;
+                    const req = store.add(cleanData);
+                    req.onsuccess = () => {
+                        completed++;
+                        if (completed >= dataArray.length && !hasError) resolve(completed);
+                    };
+                    req.onerror = () => {
+                        if (!hasError) {
+                            hasError = true;
+                            reject(new Error(`批量写入失败: ${req.error?.message || '未知错误'}`));
+                        }
+                    };
+                } catch (e) {
+                    if (!hasError) {
+                        hasError = true;
+                        reject(e);
+                    }
+                }
+            }
+        });
+    }
+
+    async _delete(storeName, key) {
+        const store = await this._getStore(storeName, 'readwrite');
+        return new Promise((resolve, reject) => {
+            const req = store.delete(key);
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    _isNotDeleted(row) {
+        return row.deleted_at === null || row.deleted_at === undefined;
+    }
+
+    _isDeleted(row) {
+        return row.deleted_at !== null && row.deleted_at !== undefined;
+    }
+
     // ===================== 初始化 =====================
 
-    /**
-     * 首次初始化：创建默认词书 + 预置数据
-     */
     async initializeDefaults() {
-        // 检查是否已有词书
         const books = await this.getBooks();
         if (books.length === 0) {
             const defaultBook = await this.addBook({ 
@@ -124,16 +231,10 @@ class WordDatabase {
             console.log('📚 已创建默认词书: 通用基础词书 (id=' + defaultBook + ')');
         }
 
-        // 迁移孤儿数据：所有 book_id 缺失的单词归入通用基础词书
         await this._migrateOrphanWords();
-
-        // 预置 200 词（仅首次）
         await this.seedDemoData();
     }
 
-    /**
-     * 迁移缺失 book_id 的单词到通用基础词书
-     */
     async _migrateOrphanWords() {
         const books = await this.getBooks();
         const defaultBookId = books.length > 0 ? books[0].id : 1;
@@ -150,378 +251,6 @@ class WordDatabase {
             console.log(`📦 已迁移 ${migrated} 个孤儿单词到默认词书`);
         }
     }
-
-    // ==================== 词书管理 ====================
-
-    /**
-     * 获取所有词书
-     */
-    async getBooks() {
-        return this._getAll('books');
-    }
-
-    /**
-     * 根据 ID 获取词书
-     */
-    async getBookById(id) {
-        return this._getByKey('books', id);
-    }
-
-    /**
-     * 新增词书
-     */
-    async addBook(bookData) {
-        const book = {
-            name: bookData.name || '未命名词书',
-            description: bookData.description || '',
-            is_system: !!bookData.is_system,
-            created_at: new Date().toISOString()
-        };
-        return this._add('books', book);
-    }
-
-    /**
-     * 删除词书（单词重置到默认词书）
-     */
-    async deleteBook(bookId) {
-        const books = await this.getBooks();
-        const defaultBook = books.find(b => b.is_system) || books[0];
-        if (!defaultBook) throw new Error('没有默认词书');
-
-        // 防止删除默认词书
-        if (bookId === defaultBook.id) {
-            throw new Error('不能删除默认词书');
-        }
-
-        // 将该词书下的所有单词重置到默认词书
-        const all = await this._getAllRaw('words');
-        for (const row of all) {
-            if (row.book_id === bookId && this._isNotDeleted(row)) {
-                await this.updateWord(row.id, { book_id: defaultBook.id });
-            }
-        }
-
-        return this._delete('books', bookId);
-    }
-
-    /**
-     * 获取已激活的词书 ID 列表
-     */
-    async getActiveBookIds() {
-        const saved = await this.getSetting('active_books', null);
-        if (saved) return saved;
-        
-        // 默认全选
-        const books = await this.getBooks();
-        return books.map(b => b.id);
-    }
-
-    /**
-     * 保存激活的词书 ID 列表
-     */
-    async saveActiveBookIds(ids) {
-        return this.saveSetting('active_books', ids);
-    }
-
-    // ==================== 单词 CRUD ====================
-
-    /**
-     * 判断记录是否未删除（兼容 deleted_at 不存在或为 null 的情况）
-     */
-    _isNotDeleted(row) {
-        return row.deleted_at === null || row.deleted_at === undefined;
-    }
-
-    /**
-     * 判断记录是否已删除
-     */
-    _isDeleted(row) {
-        return row.deleted_at !== null && row.deleted_at !== undefined;
-    }
-
-    /**
-     * 获取所有未删除的单词
-     */
-    async getAllWords() {
-        const results = await this._getAllRaw('words', (row) => this._isNotDeleted(row));
-        return results.map(r => WordModel.fromRow(r)).filter(r => r !== null);
-    }
-
-    /**
-     * 根据词书 ID 列表获取未删除单词
-     */
-    async getWordsByBooks(bookIds) {
-        const results = await this._getAllRaw('words', row => 
-            this._isNotDeleted(row) && bookIds.includes(row.book_id)
-        );
-        return results.map(r => WordModel.fromRow(r)).filter(r => r !== null);
-    }
-
-    /**
-     * 获取回收站中的单词
-     */
-    async getTrashWords() {
-        const results = await this._getAllRaw('words', (row) => this._isDeleted(row));
-        return results.map(r => WordModel.fromRow(r)).filter(r => r !== null);
-    }
-
-    /**
-     * 根据 ID 获取单词
-     */
-    async getWordById(id) {
-        const row = await this._getByKey('words', id);
-        return WordModel.fromRow(row);
-    }
-
-    /**
-     * 添加一个单词
-     */
-    async addWord(wordData) {
-        const word = WordModel.create(wordData);
-        word.created_at = new Date().toISOString();
-        return this._add('words', word);
-    }
-
-    /**
-     * 批量添加单词
-     */
-    async addWords(wordsArray) {
-        const now = new Date().toISOString();
-        const batch = wordsArray.map(w => {
-            const word = WordModel.create(w);
-            word.created_at = now;
-            return word;
-        });
-        return this._addBatch('words', batch);
-    }
-
-    /**
-     * 更新单词
-     */
-    async updateWord(id, updates) {
-        const store = await this._getStore('words', 'readwrite');
-        return new Promise((resolve, reject) => {
-            const getReq = store.get(id);
-            getReq.onsuccess = () => {
-                const word = getReq.result;
-                if (!word) { resolve(null); return; }
-                Object.assign(word, updates);
-                if (updates.familiarity !== undefined) {
-                    word.familiarity = Math.min(5, Math.max(0, updates.familiarity));
-                }
-                const putReq = store.put(word);
-                putReq.onsuccess = () => resolve(WordModel.fromRow(word));
-                putReq.onerror = () => reject(putReq.error);
-            };
-            getReq.onerror = () => reject(getReq.error);
-        });
-    }
-
-    /**
-     * 增加熟悉度（上限 5）
-     */
-    async increaseFamiliarity(id) {
-        const word = await this.getWordById(id);
-        if (!word) return null;
-        const newFam = Math.min(5, (word.familiarity || 0) + 1);
-        const updated = await this.updateWord(id, { familiarity: newFam });
-        if (updated) {
-            await this.recordStudyEvent(word.word, word.category);
-        }
-        return updated;
-    }
-
-    /**
-     * 切换收藏状态
-     */
-    async toggleFavorite(id) {
-        const word = await this.getWordById(id);
-        if (!word) return null;
-        return this.updateWord(id, { is_favorite: !word.is_favorite });
-    }
-
-    /**
-     * 软删除单词
-     */
-    async softDeleteWord(id) {
-        return this.updateWord(id, { 
-            deleted_at: new Date().toISOString(),
-            is_favorite: false  // 删除时自动取消收藏
-        });
-    }
-
-    /**
-     * 恢复单词（从回收站）
-     */
-    async restoreWord(id) {
-        return this.updateWord(id, { deleted_at: null });
-    }
-
-    /**
-     * 物理删除单词
-     */
-    async hardDeleteWord(id) {
-        return this._delete('words', id);
-    }
-
-    /**
-     * 清空回收站
-     */
-    async clearTrash() {
-        const trashWords = await this.getTrashWords();
-        for (const w of trashWords) {
-            await this.hardDeleteWord(w.id);
-        }
-        return trashWords.length;
-    }
-
-    /**
-     * 自动清理过期回收站单词
-     */
-    async autoCleanTrash(days = 30) {
-        const trashWords = await this.getTrashWords();
-        const now = Date.now();
-        const cutoff = now - days * 24 * 60 * 60 * 1000;
-        let cleaned = 0;
-        for (const w of trashWords) {
-            if (w.deleted_at && new Date(w.deleted_at).getTime() < cutoff) {
-                await this.hardDeleteWord(w.id);
-                cleaned++;
-            }
-        }
-        return cleaned;
-    }
-
-    // ==================== 查询 ====================
-
-    /**
-     * 按分类筛选单词（基于已激活词书）
-     */
-    async getWordsByCategory(category, bookIds = null) {
-        let words;
-        if (bookIds) {
-            words = await this.getWordsByBooks(bookIds);
-        } else {
-            words = await this.getAllWords();
-        }
-        if (!category || category === '全部') return words;
-        return words.filter(w => w.category === category);
-    }
-
-    /**
-     * 按单元获取单词
-     */
-    async getWordsByUnit(unit) {
-        const all = await this.getAllWords();
-        return all.filter(w => w.unit === unit);
-    }
-
-    /**
-     * 获取收藏单词
-     */
-    async getFavoriteWords(category = null, bookIds = null) {
-        let words;
-        if (bookIds) {
-            words = await this.getWordsByBooks(bookIds);
-        } else {
-            words = await this.getAllWords();
-        }
-        words = words.filter(w => w.is_favorite);
-        if (category && category !== '全部') {
-            words = words.filter(w => w.category === category);
-        }
-        return words;
-    }
-
-    /**
-     * 按单词文本搜索（模糊匹配）
-     */
-    async findWordByText(wordText) {
-        const all = await this.getAllWords();
-        return all.find(w => w.word.toLowerCase() === wordText.toLowerCase());
-    }
-
-    /**
-     * 搜索单词（模糊匹配，返回匹配列表）
-     */
-    async searchWords(keyword) {
-        if (!keyword || !keyword.trim()) return [];
-        const kw = keyword.trim().toLowerCase();
-        const all = await this.getAllWords();
-        return all.filter(w => 
-            w.word.toLowerCase().includes(kw) || 
-            (w.definition && w.definition.toLowerCase().includes(kw))
-        ).slice(0, 50);  // 最多返回 50 条
-    }
-
-    // ==================== 统计 ====================
-
-    async getStats() {
-        const all = await this.getAllWords();
-        const trash = await this.getTrashWords();
-        const favorites = all.filter(w => w.is_favorite);
-        const totalFam = all.reduce((sum, w) => sum + w.familiarity, 0);
-        return {
-            totalWords: all.length,
-            averageFamiliarity: all.length > 0 ? (totalFam / all.length).toFixed(1) : 0,
-            favoriteCount: favorites.length,
-            trashCount: trash.length
-        };
-    }
-
-    async recordStudyEvent(word, category) {
-        const today = new Date().toISOString().split('T')[0];
-        return this._add('stats', {
-            date: today,
-            word: word,
-            category: category || '未知',
-            type: 'familiar',
-            timestamp: new Date().toISOString()
-        });
-    }
-
-    async getStudyTrend(days = 7) {
-        const store = await this._getStore('stats', 'readonly');
-        return new Promise((resolve) => {
-            const req = store.getAll();
-            req.onsuccess = () => {
-                const records = req.result || [];
-                const result = [];
-                const now = new Date();
-                for (let i = days - 1; i >= 0; i--) {
-                    const d = new Date(now);
-                    d.setDate(d.getDate() - i);
-                    const dateStr = d.toISOString().split('T')[0];
-                    const count = records.filter(r => r.date === dateStr && r.type === 'familiar').length;
-                    result.push({ date: dateStr, count });
-                }
-                resolve(result);
-            };
-            req.onerror = () => resolve([]);
-        });
-    }
-
-    // ==================== 设置 ====================
-
-    async saveSetting(key, value) {
-        const store = await this._getStore('settings', 'readwrite');
-        return new Promise((resolve, reject) => {
-            const req = store.put({ key, value });
-            req.onsuccess = () => resolve(true);
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    async getSetting(key, defaultValue = null) {
-        const store = await this._getStore('settings', 'readonly');
-        return new Promise((resolve) => {
-            const req = store.get(key);
-            req.onsuccess = () => resolve(req.result ? req.result.value : defaultValue);
-            req.onerror = () => resolve(defaultValue);
-        });
-    }
-
-    // ==================== 预置数据 ====================
 
     async seedDemoData() {
         const existing = await this.getAllWords();
@@ -746,114 +475,7 @@ class WordDatabase {
         console.log(`📦 已插入 ${words.length} 个预置单词（归属通用基础词书）`);
         return true;
     }
-
-    // ==================== 内部方法 ====================
-
-    async _getStore(storeName, mode = 'readonly') {
-        if (!this.db) await this.open();
-        const transaction = this.db.transaction(storeName, mode);
-        return transaction.objectStore(storeName);
-    }
-
-    async _getAll(storeName) {
-        const store = await this._getStore(storeName, 'readonly');
-        return new Promise((resolve, reject) => {
-            const req = store.getAll();
-            req.onsuccess = () => resolve(req.result || []);
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    async _getAllRaw(storeName, filterFn = null) {
-        const store = await this._getStore(storeName, 'readonly');
-        return new Promise((resolve, reject) => {
-            const req = store.getAll();
-            req.onsuccess = () => {
-                let results = req.result || [];
-                if (filterFn) results = results.filter(filterFn);
-                resolve(results);
-            };
-            req.onerror = () => {
-                // 处理索引不存在的兼容问题
-                console.warn('getAllRaw 查询失败，尝试全表扫描:', req.error);
-                const cursorReq = store.openCursor();
-                const results = [];
-                cursorReq.onsuccess = (e) => {
-                    const cursor = e.target.result;
-                    if (cursor) {
-                        results.push(cursor.value);
-                        cursor.continue();
-                    } else {
-                        if (filterFn) {
-                            resolve(results.filter(filterFn));
-                        } else {
-                            resolve(results);
-                        }
-                    }
-                };
-                cursorReq.onerror = () => reject(cursorReq.error);
-            };
-        });
-    }
-
-    async _getByKey(storeName, key) {
-        const store = await this._getStore(storeName, 'readonly');
-        return new Promise((resolve, reject) => {
-            const req = store.get(key);
-            req.onsuccess = () => resolve(req.result || null);
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    async _add(storeName, data) {
-        const store = await this._getStore(storeName, 'readwrite');
-        return new Promise((resolve, reject) => {
-            const req = store.add(data);
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
-    }
-
-    async _addBatch(storeName, dataArray) {
-        if (!dataArray || dataArray.length === 0) return 0;
-        const store = await this._getStore(storeName, 'readwrite');
-        return new Promise((resolve, reject) => {
-            let completed = 0;
-            let hasError = false;
-            for (const data of dataArray) {
-                try {
-                    // 对于 autoIncrement 表，删除 id 避免主键冲突
-                    const cleanData = { ...data };
-                    delete cleanData.id;
-                    const req = store.add(cleanData);
-                    req.onsuccess = () => {
-                        completed++;
-                        if (completed >= dataArray.length && !hasError) resolve(completed);
-                    };
-                    req.onerror = () => {
-                        if (!hasError) {
-                            hasError = true;
-                            reject(new Error(`批量写入失败: ${req.error?.message || '未知错误'}`));
-                        }
-                    };
-                } catch (e) {
-                    if (!hasError) {
-                        hasError = true;
-                        reject(e);
-                    }
-                }
-            }
-        });
-    }
-
-    async _delete(storeName, key) {
-        const store = await this._getStore(storeName, 'readwrite');
-        return new Promise((resolve, reject) => {
-            const req = store.delete(key);
-            req.onsuccess = () => resolve(true);
-            req.onerror = () => reject(req.error);
-        });
-    }
 }
 
-window.WordDB = new WordDatabase();
+window.WordDatabase = WordDatabase;
+console.log('[WordWiz DAO] connection.js 已加载 — WordDatabase 类已定义');

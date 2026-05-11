@@ -63,6 +63,8 @@ class WordCard {
                 }
                 famBtn.title = `熟悉度: ${WordModel.getFamiliarityLabel(updated.familiarity)}`;
                 window.Toast.show(`✓ "${updated.word}" 熟悉度 +1`);
+                // 成就：记录学习动作
+                await AchievementHelper.recordStudy();
                 // 通知刷新统计
                 if (options.onUpdate) options.onUpdate();
             }
@@ -81,6 +83,8 @@ class WordCard {
                 favBtn.classList.toggle('favorited');
                 favBtn.title = updated.is_favorite ? '取消收藏' : '收藏';
                 window.Toast.show(updated.is_favorite ? '⭐ 已收藏' : '已取消收藏');
+                // 成就：检测收藏 50 个
+                await AchievementHelper.checkFiftyFavorites();
                 if (options.onUpdate) options.onUpdate();
             }
         });

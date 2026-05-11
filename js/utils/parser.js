@@ -9,7 +9,18 @@
 
 class WordParser {
     /**
-     * 解析 CSV 文本
+     * 解析 CSV 文本（按列名解析）
+     * 
+     * 支持列名（不区分大小写）：
+     *   word       — 必填，英文单词
+     *   definition — 必填，中文释义
+     *   category   — 可选，默认 "其他"
+     *   unit       — 可选，默认 1
+     *   book_source — 可选，默认使用 options.bookSource 或 "导入词库"
+     * 
+     * 第一行为表头（列名），后续行为数据行。
+     * 当检测到第一行列名包含 "word" 和 "definition" 时，按列名解析；
+     * 否则回退到按位置解析（兼容旧格式）。
      */
     static async parseCSV(csvText, options = {}) {
         const result = { success: 0, skipped: 0, errors: [], createdBookId: null, bookName: '' };
@@ -30,9 +41,31 @@ class WordParser {
                     result.bookName = options.bookSource;
                 }
             }
-            if (!bookId) bookId = 1; // 默认通用基础词书
+            if (!bookId) bookId = 1;
 
-            const startIndex = options.hasHeader !== false ? 1 : 0;
+            // 解析第一行，判断是否有表头
+            const firstLineFields = this._parseCSVLine(lines[0]);
+            const hasHeader = options.hasHeader !== false && 
+                this._detectHeader(firstLineFields);
+
+            let colMap = null;
+            const startIndex = hasHeader ? 1 : 0;
+
+            // 如果有表头，建立列名 → 索引映射
+            if (hasHeader) {
+                colMap = {};
+                const headerFields = firstLineFields.map(f => f.trim().toLowerCase());
+                const expectedCols = ['word', 'definition', 'category', 'unit', 'book_source'];
+                for (const col of expectedCols) {
+                    const idx = headerFields.indexOf(col);
+                    if (idx >= 0) colMap[col] = idx;
+                }
+                // 兼容 book_source 的别名
+                if (colMap['book_source'] === undefined) {
+                    const altIdx = headerFields.indexOf('booksource');
+                    if (altIdx >= 0) colMap['book_source'] = altIdx;
+                }
+            }
             
             for (let i = startIndex; i < lines.length; i++) {
                 try {
@@ -45,22 +78,41 @@ class WordParser {
                         continue;
                     }
 
-                    const word = fields[0].trim();
-                    const definition = fields[1].trim();
-                    const category = fields[2] ? fields[2].trim() : '其他';
-                    const unit = fields[3] ? parseInt(fields[3].trim()) || 1 : 1;
+                    // 按列名或位置提取字段
+                    let word, definition, category, unit, bookSource;
+                    
+                    if (colMap) {
+                        word = colMap['word'] !== undefined ? (fields[colMap['word']] || '').trim() : '';
+                        definition = colMap['definition'] !== undefined ? (fields[colMap['definition']] || '').trim() : '';
+                        category = colMap['category'] !== undefined && fields[colMap['category']] ? fields[colMap['category']].trim() : '其他';
+                        unit = colMap['unit'] !== undefined && fields[colMap['unit']] ? parseInt(fields[colMap['unit']].trim()) || 1 : 1;
+                        bookSource = colMap['book_source'] !== undefined && fields[colMap['book_source']] ? fields[colMap['book_source']].trim() : '';
+                    } else {
+                        word = fields[0].trim();
+                        definition = fields[1].trim();
+                        category = fields[2] ? fields[2].trim() : '其他';
+                        unit = fields[3] ? parseInt(fields[3].trim()) || 1 : 1;
+                        bookSource = '';
+                    }
+
+                    // 如果数据行中的 book_source 与整体不同，创建或切换到对应词书
+                    let rowBookId = bookId;
+                    if (bookSource && bookSource !== (options.bookSource || '')) {
+                        const foundBookId = await this._ensureBook(bookSource);
+                        if (foundBookId) rowBookId = foundBookId;
+                    }
 
                     if (!word) {
                         result.errors.push(`第 ${i + 1} 行：单词为空`);
                         continue;
                     }
 
-                    // 去重检测（同一词书内）
+                    // 去重检测
                     const existing = await WordDB.findWordByText(word);
                     if (existing) {
                         if (options.onDuplicate === 'overwrite') {
                             await WordDB.updateWord(existing.id, {
-                                definition, category, unit, book_id: bookId
+                                definition, category, unit, book_id: rowBookId
                             });
                             result.success++;
                         } else {
@@ -71,8 +123,8 @@ class WordParser {
 
                     await WordDB.addWord({
                         word, definition, category, unit,
-                        book_id: bookId,
-                        book_source: options.bookSource || '导入词库'
+                        book_id: rowBookId,
+                        book_source: bookSource || options.bookSource || '导入词库'
                     });
                     result.success++;
                 } catch (err) {
@@ -84,6 +136,29 @@ class WordParser {
         }
         
         return result;
+    }
+
+    /**
+     * 检测第一行是否为表头（包含 word 和 definition 列名）
+     */
+    static _detectHeader(fields) {
+        const lower = fields.map(f => f.trim().toLowerCase());
+        return lower.includes('word') && lower.includes('definition');
+    }
+
+    /**
+     * 生成 CSV 模板文件（含表头和一行示例数据）
+     * @returns {string} CSV 文本
+     */
+    static generateTemplateCSV() {
+        const header = 'word,definition,category,unit,book_source';
+        const example = 'example,示例单词 n. 示例；范例,自定义,1,我的词书';
+        return header + '\n' + example + '\n\n# 列说明：\n' +
+            '# word       — 必填，英文单词\n' +
+            '# definition — 必填，中文释义（如含逗号，请用双引号括起）\n' +
+            '# category   — 可选，默认"其他"，如：雅思、托福、考研、四级、六级\n' +
+            '# unit       — 可选，默认1，相同编号的单词归为一个单元\n' +
+            '# book_source — 可选，默认使用文件名，系统自动创建同名词书\n';
     }
 
     /**
