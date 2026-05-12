@@ -5,10 +5,7 @@
  * - 显示收藏的单词（is_favorite = true）
  * - 按分类筛选
  * - 6 种排序模式：默认、熟悉度↑、熟悉度↓、A-Z、Z-A、随机混序
- * 
- * v6 重写：
- * - 统一的 6 种排序模式选择器
- * - 混序结果存储在 AppState.favorites.shuffledWords
+ * - 导出收藏单词为 JSON / CSV
  */
 
 class FavoritesPage {
@@ -16,10 +13,11 @@ class FavoritesPage {
         container.innerHTML = `
             <div class="page-header">
                 <div class="page-title">⭐ 收藏夹</div>
-                <div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
                     <button class="btn btn-sm btn-primary" id="shuffleFavBtn">
                         ${AppState.favorites.sortMode === 'shuffled' ? '🔁 恢复顺序' : '🔀 混序学习'}
                     </button>
+                    <button class="btn btn-sm" id="exportFavBtn">📤 导出</button>
                 </div>
             </div>
             <div id="favCategoryFilter"></div>
@@ -46,7 +44,6 @@ class FavoritesPage {
                     AppState.favorites.sortMode = 'default';
                     AppState.favorites.shuffledWords = null;
                     shuffleBtn.textContent = '🔀 混序学习';
-                    // 更新排序选择器高亮
                     const activeBtn = container.querySelector('#favSortSelector .sort-btn.active');
                     if (activeBtn) activeBtn.classList.remove('active');
                     const defaultBtn = container.querySelector('#favSortSelector .sort-btn[data-sort="default"]');
@@ -57,7 +54,6 @@ class FavoritesPage {
                     AppState.favorites.sortMode = 'shuffled';
                     AppState.favorites.shuffledWords = WordSorter.shuffle(words || []).map(w => w.id);
                     shuffleBtn.textContent = '🔁 恢复顺序';
-                    // 更新排序选择器高亮
                     const activeBtn = container.querySelector('#favSortSelector .sort-btn.active');
                     if (activeBtn) activeBtn.classList.remove('active');
                     const shuffledBtn = container.querySelector('#favSortSelector .sort-btn[data-sort="shuffled"]');
@@ -68,7 +64,70 @@ class FavoritesPage {
             });
         }
 
+        // 导出按钮
+        this._setupExport(container);
+
         await this._renderFavList(container);
+    }
+
+    /**
+     * 配置导出按钮：点击弹出菜单选择 JSON / CSV
+     */
+    static _setupExport(container) {
+        const exportBtn = container.querySelector('#exportFavBtn');
+        if (!exportBtn) return;
+
+        exportBtn.addEventListener('click', async () => {
+            const menu = document.createElement('div');
+            menu.style.cssText = 'position:fixed;background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius-md);box-shadow:var(--shadow-card);z-index:100;overflow:hidden;';
+            const rect = exportBtn.getBoundingClientRect();
+            menu.style.top = (rect.bottom + 4) + 'px';
+            menu.style.right = (window.innerWidth - rect.right) + 'px';
+            menu.innerHTML = `
+                <div style="padding:6px 0;">
+                    <div class="export-menu-item" data-format="json" style="padding:8px 20px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:8px;white-space:nowrap;">📄 导出 JSON</div>
+                    <div class="export-menu-item" data-format="csv" style="padding:8px 20px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:8px;white-space:nowrap;">📊 导出 CSV</div>
+                </div>
+            `;
+            document.body.appendChild(menu);
+
+            const closeMenu = (e) => {
+                if (!menu.contains(e.target) && e.target !== exportBtn) {
+                    menu.remove();
+                    document.removeEventListener('click', closeMenu);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', closeMenu), 0);
+
+            menu.querySelectorAll('.export-menu-item').forEach(item => {
+                item.addEventListener('mouseenter', () => item.style.background = 'var(--bg-hover)');
+                item.addEventListener('mouseleave', () => item.style.background = '');
+                item.addEventListener('click', async () => {
+                    menu.remove();
+                    const format = item.dataset.format;
+                    try {
+                        let content, filename;
+                        if (format === 'json') {
+                            content = await WordParser.exportFavoritesToJSON(AppState.favorites.category);
+                            filename = 'wordwiz_favorites.json';
+                        } else {
+                            content = await WordParser.exportFavoritesToCSV(AppState.favorites.category);
+                            filename = 'wordwiz_favorites.csv';
+                        }
+                        const blob = new Blob([content], { type: format === 'json' ? 'application/json' : 'text/csv;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url; a.download = filename;
+                        document.body.appendChild(a); a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        window.Toast.show('📤 已导出 ' + filename);
+                    } catch (e) {
+                        window.Toast.show('❌ 导出失败: ' + e.message);
+                    }
+                });
+            });
+        });
     }
 
     /**
@@ -114,7 +173,6 @@ class FavoritesPage {
                 return;
             }
 
-            // 根据 sortMode 排序
             const mode = AppState.favorites.sortMode || 'default';
             let sorted;
             if (mode === 'shuffled' && AppState.favorites.shuffledWords) {
@@ -123,14 +181,13 @@ class FavoritesPage {
                 sorted = WordSorter.sort(words, mode);
             }
 
-            // 构建列表
             listContainer.innerHTML = '';
             const wrapper = document.createElement('div');
             wrapper.className = 'unit-card';
             
             const header = document.createElement('div');
             header.className = 'unit-header';
-            header.innerHTML = `<div class="unit-title">⭐ 收藏的单词 <span class="unit-count">· ${sorted.length} 词</span></div>`;
+            header.innerHTML = '<div class="unit-title">⭐ 收藏的单词 <span class="unit-count">· ' + sorted.length + ' 词</span></div>';
             wrapper.appendChild(header);
 
             const list = document.createElement('div');

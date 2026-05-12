@@ -711,6 +711,51 @@ body::before {
     font-size: 16px;
 }
 
+/* ====== 移动端适配：单词卡片释义换行 ====== */
+@media (max-width: 767px) {
+    .word-item {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 4px 8px;
+        padding: 10px 12px;
+    }
+    .word-text {
+        min-width: 0;
+        font-size: 14px;
+        flex-shrink: 0;
+    }
+    .word-definition {
+        flex: 0 0 100%;
+        min-width: 0;
+        font-size: 13px;
+        line-height: 1.5;
+        padding: 0;
+        word-break: break-word;
+        overflow-wrap: break-word;
+    }
+    .word-actions {
+        margin-left: auto;
+        flex-shrink: 0;
+    }
+}
+@media (max-width: 480px) {
+    .word-item {
+        padding: 8px 10px;
+        gap: 3px 6px;
+    }
+    .word-text {
+        font-size: 13px;
+    }
+    .word-definition {
+        font-size: 12px;
+    }
+    .action-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 14px;
+    }
+}
+
 /* ====== 响应式：宽屏 ====== */
 @media (min-width: 800px) {
     .word-list {

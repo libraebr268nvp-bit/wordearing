@@ -4,9 +4,12 @@
 
 ```
 d:\gxj\code\wordlearing/
-├── index.html                          # 唯一 HTML，按序加载 14 个 JS
+├── index.html                          # 唯一 HTML，按序加载 16 个 JS
 ├── start.bat                           # 启动脚本：npx http-server -p 3000 -c-1
 ├── server.py                           # Python 版开发服务器（备选）
+├── download_words.py                   # Python 脚本：从 ECDICT 下载并转换词库为 JSON
+├── ecdict.csv                          # ECDICT 英汉词典源文件（约 130 万词条）
+├── d                                   # 目录暂存（可能为旧数据残留）
 │
 ├── css/
 │   └── style.css                       # 深色科技感主题，网格点阵背景
@@ -28,10 +31,13 @@ d:\gxj\code\wordlearing/
 │   │
 │   ├── screens/
 │   │   ├── home.js                     # 首页 - 学习页
+│   │   ├── home/
+│   │   │   └── shuffle.js              # 首页排序工具模块（HomeShuffle）
 │   │   ├── favorites.js                # 收藏夹
 │   │   ├── trash.js                    # 回收站
 │   │   ├── settings.js                 # 设置
-│   │   └── challenge.js                # 挑战模式（#/challenge）
+│   │   ├── challenge.js                # 挑战模式（#/challenge）
+│   │   └── wrongwords.js               # 错题集（#/wrong-words）
 │   │
 │   ├── widgets/
 │   │   ├── categoryFilter.js           # 分类筛选按钮组
@@ -41,11 +47,16 @@ d:\gxj\code\wordlearing/
 │   └── utils/
 │       ├── parser.js                   # CSV/JSON 导入导出
 │       ├── notifications.js            # 桌面通知提醒
-│       └── stats.js                    # Chart.js 统计图表
+│       ├── stats.js                    # Chart.js 统计图表
+│       ├── sorter.js                   # 通用排序模块（WordSorter，6 种排序模式）
+│       └── achievements.js             # 成就系统（AchievementHelper，10 个成就）
 │
 ├── assets/
 │   ├── words_cet4.json                 # 四级词库
 │   └── words_cet6.json                 # 六级词库
+│
+├── scripts/                            # 工具脚本（计划新增）
+│   └── (split_csv.js 等)
 │
 └── docs/
     ├── project_overview.md             # 项目总文档
@@ -154,6 +165,34 @@ d:\gxj\code\wordlearing/
 | `ChallengePage._renderResult(container)` | 渲染结果页（成绩/环图/错题回顾/冷却记录/成就触发） |
 | 状态机 | `start → playing → result` 三态切换 |
 
+### `js/screens/wrongwords.js` — 错题集
+| 函数 | 说明 |
+|------|------|
+| `WrongWordsPage.render(container)` | 渲染错题集页面：统计 + 分类筛选 + 单词列表 |
+| `WrongWordsPage._renderList(container)` | 获取错题数据 → 渲染统计/筛选/列表 |
+| `WrongWordsPage._renderWords(container, wrongWords, activeCategory)` | 渲染错题列表（过滤 + 单项删除） |
+| `WrongWordsPage._setupExport(container)` | 配置导出按钮（JSON / CSV） |
+
+### `js/screens/home/shuffle.js` — 首页排序工具
+| 函数 | 说明 |
+|------|------|
+| `HomeShuffle.reset()` | 重置排序状态为默认 |
+| `HomeShuffle.setMode(mode, words)` | 设置排序模式并生成 shuffled 排列 |
+| `HomeShuffle.getSortedWords(words)` | 获取排序后的单词列表 |
+| `HomeShuffle.isShuffled()` | 判断当前是否处于 shuffled 模式 |
+
+### `js/utils/sorter.js` — 通用排序模块
+| 函数 | 说明 |
+|------|------|
+| `WordSorter.MODES` | 6 种排序模式数组 |
+| `WordSorter.getLabel(mode)` | 获取排序模式显示标签 |
+| `WordSorter.getShortLabel(mode)` | 获取排序模式短标签 |
+| `WordSorter.sort(words, mode, storedOrder)` | 排序入口（6 种模式） |
+| `WordSorter.shuffle(arr)` | Fisher-Yates 洗牌 |
+| `WordSorter.isDeterministic(mode)` | 判断排序模式是否确定（非随机） |
+| `WordSorter.renderSelector(currentMode, onChange)` | 渲染排序选择器 HTML |
+| `WordSorter.bindSelector(container, onChange)` | 绑定排序选择器事件 |
+
 ### `js/utils/achievements.js` — 成就系统
 | 函数 | 说明 |
 |------|------|
@@ -244,6 +283,10 @@ d:\gxj\code\wordlearing/
 | `window.TrashPage` | 类 | 回收站页面（静态） |
 | `window.SettingsPage` | 类 | 设置页面（静态） |
 | `window.ChallengePage` | 类 | 挑战模式页面（静态） |
+| `window.WrongWordsPage` | 类 | 错题集页面（静态） |
+| `window.HomeShuffle` | 类 | 首页排序工具（静态） |
+| `window.WordSorter` | 类 | 通用排序模块（静态） |
+| `window.AchievementHelper` | 类 | 成就系统（静态） |
 | `window.WordParser` | 类 | 导入导出工具（静态） |
 | `window.NotificationHelper` | 类 | 桌面通知工具（静态） |
 | `window.StatsHelper` | 类 | 统计图表工具（静态） |

@@ -12,7 +12,8 @@ class WrongWordsPage {
         container.innerHTML = `
             <div class="page-header">
                 <div class="page-title">📝 错题集</div>
-                <div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button class="btn btn-sm" id="exportWrongWordsBtn">📤 导出</button>
                     <button class="btn btn-danger btn-sm" id="clearWrongWordsBtn">🗑️ 清空错题</button>
                 </div>
             </div>
@@ -21,12 +22,75 @@ class WrongWordsPage {
         const content = container.querySelector('#wrongWordsContent');
         await this._renderList(content);
 
+        // 导出按钮
+        this._setupExport(container);
+
         // 清空按钮
         document.getElementById('clearWrongWordsBtn').addEventListener('click', async () => {
             if (!confirm('确定要清空所有错题记录吗？')) return;
             await WordDB.saveSetting('challenge_wrong_words', []);
             window.Toast.show('✅ 错题集已清空');
             await this._renderList(content);
+        });
+    }
+
+    /**
+     * 配置导出按钮
+     */
+    static _setupExport(container) {
+        const exportBtn = container.querySelector('#exportWrongWordsBtn');
+        if (!exportBtn) return;
+
+        exportBtn.addEventListener('click', async () => {
+            const menu = document.createElement('div');
+            menu.style.cssText = 'position:fixed;background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius-md);box-shadow:var(--shadow-card);z-index:100;overflow:hidden;';
+            const rect = exportBtn.getBoundingClientRect();
+            menu.style.top = (rect.bottom + 4) + 'px';
+            menu.style.right = (window.innerWidth - rect.right) + 'px';
+            menu.innerHTML = `
+                <div style="padding:6px 0;">
+                    <div class="export-menu-item" data-format="json" style="padding:8px 20px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:8px;white-space:nowrap;">📄 导出 JSON</div>
+                    <div class="export-menu-item" data-format="csv" style="padding:8px 20px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:8px;white-space:nowrap;">📊 导出 CSV</div>
+                </div>
+            `;
+            document.body.appendChild(menu);
+
+            const closeMenu = (e) => {
+                if (!menu.contains(e.target) && e.target !== exportBtn) {
+                    menu.remove();
+                    document.removeEventListener('click', closeMenu);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', closeMenu), 0);
+
+            menu.querySelectorAll('.export-menu-item').forEach(item => {
+                item.addEventListener('mouseenter', () => item.style.background = 'var(--bg-hover)');
+                item.addEventListener('mouseleave', () => item.style.background = '');
+                item.addEventListener('click', async () => {
+                    menu.remove();
+                    const format = item.dataset.format;
+                    try {
+                        let content, filename;
+                        if (format === 'json') {
+                            content = await WordParser.exportWrongWordsToJSON();
+                            filename = 'wordwiz_wrong_words.json';
+                        } else {
+                            content = await WordParser.exportWrongWordsToCSV();
+                            filename = 'wordwiz_wrong_words.csv';
+                        }
+                        const blob = new Blob([content], { type: format === 'json' ? 'application/json' : 'text/csv;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url; a.download = filename;
+                        document.body.appendChild(a); a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        window.Toast.show('📤 已导出 ' + filename);
+                    } catch (e) {
+                        window.Toast.show('❌ 导出失败: ' + e.message);
+                    }
+                });
+            });
         });
     }
 

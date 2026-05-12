@@ -24,7 +24,7 @@ class WordParser {
      */
     static async parseCSV(csvText, options = {}) {
         const result = { success: 0, skipped: 0, errors: [], createdBookId: null, bookName: '' };
-        
+
         try {
             const lines = csvText.split(/\r?\n/).filter(line => line.trim());
             if (lines.length === 0) {
@@ -45,7 +45,7 @@ class WordParser {
 
             // 解析第一行，判断是否有表头
             const firstLineFields = this._parseCSVLine(lines[0]);
-            const hasHeader = options.hasHeader !== false && 
+            const hasHeader = options.hasHeader !== false &&
                 this._detectHeader(firstLineFields);
 
             let colMap = null;
@@ -66,12 +66,12 @@ class WordParser {
                     if (altIdx >= 0) colMap['book_source'] = altIdx;
                 }
             }
-            
+
             for (let i = startIndex; i < lines.length; i++) {
                 try {
                     const line = lines[i].trim();
                     if (!line) continue;
-                    
+
                     const fields = this._parseCSVLine(line);
                     if (fields.length < 2) {
                         result.errors.push(`第 ${i + 1} 行格式错误`);
@@ -80,7 +80,7 @@ class WordParser {
 
                     // 按列名或位置提取字段
                     let word, definition, category, unit, bookSource;
-                    
+
                     if (colMap) {
                         word = colMap['word'] !== undefined ? (fields[colMap['word']] || '').trim() : '';
                         definition = colMap['definition'] !== undefined ? (fields[colMap['definition']] || '').trim() : '';
@@ -134,7 +134,7 @@ class WordParser {
         } catch (err) {
             result.errors.push(`解析失败：${err.message}`);
         }
-        
+
         return result;
     }
 
@@ -166,11 +166,11 @@ class WordParser {
      */
     static async parseJSON(jsonText, options = {}) {
         const result = { success: 0, skipped: 0, errors: [], createdBookId: null, bookName: '' };
-        
+
         try {
             const data = JSON.parse(jsonText);
             const wordsArray = Array.isArray(data) ? data : (data.words || data.data || []);
-            
+
             if (!Array.isArray(wordsArray) || wordsArray.length === 0) {
                 result.errors.push('JSON 格式无效');
                 return result;
@@ -227,7 +227,7 @@ class WordParser {
         } catch (err) {
             result.errors.push(`JSON 解析失败：${err.message}`);
         }
-        
+
         return result;
     }
 
@@ -293,6 +293,80 @@ class WordParser {
         const rows = allWords.map(w => {
             const def = `"${(w.definition || '').replace(/"/g, '""')}"`;
             return `${w.word},${def},${w.category},${w.unit},${w.book_id || 1},${w.familiarity},${w.is_favorite ? 1 : 0}`;
+        });
+        return [header, ...rows].join('\n');
+    }
+
+    // ===================== 收藏夹导出 =====================
+
+    /**
+     * 导出收藏夹单词为 JSON
+     * @param {string} category - 分类筛选
+     */
+    static async exportFavoritesToJSON(category) {
+        const words = await WordDB.getFavoriteWords(category);
+        return JSON.stringify({
+            exportDate: new Date().toISOString(),
+            totalWords: words.length,
+            app: 'WordWiz',
+            type: 'favorites',
+            words: words.map(w => ({
+                word: w.word,
+                definition: w.definition,
+                category: w.category,
+                unit: w.unit,
+                book_source: w.book_source,
+                familiarity: w.familiarity
+            }))
+        }, null, 2);
+    }
+
+    /**
+     * 导出收藏夹单词为 CSV
+     * @param {string} category - 分类筛选
+     */
+    static async exportFavoritesToCSV(category) {
+        const words = await WordDB.getFavoriteWords(category);
+        const header = 'word,definition,category,unit,familiarity';
+        const rows = words.map(w => {
+            const def = `"${(w.definition || '').replace(/"/g, '""')}"`;
+            return `${w.word},${def},${w.category},${w.unit},${w.familiarity}`;
+        });
+        return [header, ...rows].join('\n');
+    }
+
+    // ===================== 错题本导出 =====================
+
+    /**
+     * 导出错题本单词为 JSON
+     */
+    static async exportWrongWordsToJSON() {
+        const words = await WordDB.getSetting('challenge_wrong_words', []);
+        return JSON.stringify({
+            exportDate: new Date().toISOString(),
+            totalWords: words.length,
+            app: 'WordWiz',
+            type: 'wrong-words',
+            words: words.map(w => ({
+                word: w.word,
+                definition: w.definition,
+                category: w.category,
+                book_source: w.book_source,
+                wrongDate: w.date
+            }))
+        }, null, 2);
+    }
+
+    /**
+     * 导出错题本单词为 CSV
+     */
+    static async exportWrongWordsToCSV() {
+        const words = await WordDB.getSetting('challenge_wrong_words', []);
+        const header = 'word,definition,category,wrong_date';
+        const rows = words.map(w => {
+            const def = `"${(w.definition || '').replace(/"/g, '""')}"`;
+            const date = w.date ? new Date(w.date).toLocaleDateString('zh-CN') : '';
+            return `${w.word},${def},${w.category},${date}`;
         });
         return [header, ...rows].join('\n');
     }

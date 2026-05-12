@@ -1,12 +1,12 @@
 # WordWiz — 项目上下文
 
 ## 一句话简介
-纯前端离线单词学习 App，数据存浏览器 IndexedDB，通过 Hash 路由实现 4 页面切换，零框架零依赖。
+纯前端离线单词学习 App，数据存浏览器 IndexedDB，通过 Hash 路由实现 6 个页面切换，零框架零依赖。
 
 ## 技术栈
 - **语言：** 纯 HTML + CSS + JavaScript（ES6+）
 - **存储：** IndexedDB（4 个对象仓库：words / books / settings / stats）
-- **路由：** Hash 路由（`#/home`、`#/favorites`、`#/trash`、`#/settings`）
+- **路由：** Hash 路由（`#/home`、`#/favorites`、`#/trash`、`#/settings`、`#/challenge`、`#/wrong-words`）
 - **图表：** Chart.js（内置 `js/lib/chart.umd.min.js`）
 - **通知：** Web Notifications API
 - **启动：** `npx http-server -p 3000 -c-1` 提供 HTTP 服务
@@ -18,6 +18,8 @@
 | `#/favorites` | 收藏夹 | `FavoritesPage` |
 | `#/trash` | 回收站 | `TrashPage` |
 | `#/settings` | 设置 | `SettingsPage` |
+| `#/challenge` | 挑战模式 | `ChallengePage` |
+| `#/wrong-words` | 错题集 | `WrongWordsPage` |
 
 ## 数据流概要
 ```
