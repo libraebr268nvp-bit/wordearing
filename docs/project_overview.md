@@ -11,23 +11,35 @@ d:\gxj\code\wordlearing/
 ├── index.html                 # 主入口 HTML
 ├── start.bat                  # 启动脚本（npx http-server -c-1）
 ├── server.py                  # Python 版开发服务器（备选）
+├── download_words.py          # 词库数据下载脚本（从 ECDICT 转换）
+├── ecdict.csv                 # 词典源数据（skywind3000/ECDICT, MIT）
 │
 ├── css/
-│   └── style.css              # 全局样式（深色科技感主题）
+│   └── style.css              # 全局样式（深色科技感主题，网格点阵背景）
 │
 ├── js/
 │   ├── app.js                 # ★ 主入口：初始化DB + 路由 + 全局状态 + Toast
-│   ├── db.js                  # ★ 数据库层：IndexedDB DAO（400行）
+│   │
+│   ├── db/                    # ★ 数据库层（6 文件，prototype 挂载）
+│   │   ├── connection.js      #   基类 + 建表 + 工具方法 + 初始化 + 预置数据
+│   │   ├── settings.dao.js    #   设置 DAO
+│   │   ├── stats.dao.js       #   统计 DAO
+│   │   ├── books.dao.js       #   词书 DAO（CRUD + 激活管理）
+│   │   ├── words.dao.js       #   单词 DAO（CRUD + 查询 + 搜索）
+│   │   └── index.js           #   创建 window.WordDB 单例
 │   │
 │   ├── models/
 │   │   └── word.js            # 数据模型：WordModel.create/fromRow
 │   │
 │   ├── screens/
 │   │   ├── home.js            # 首页：学习页（搜索+词书过滤+分类+单元展示+全局混序）
-│   │   ├── favorites.js       # 收藏夹：独立展示收藏单词（排序+混序+分类）
+│   │   ├── home/
+│   │   │   └── shuffle.js     # 首页排序工具（HomeShuffle，6 种排序模式）
+│   │   ├── favorites.js       # 收藏夹：独立展示收藏单词（排序+混序+分类+导出）
 │   │   ├── trash.js           # 回收站：软删除/恢复/永久删除
 │   │   ├── settings.js        # 设置：统计/词书管理/导入导出/提醒/局域网
-│   │   └── challenge.js       # 挑战模式：随机抽词答题（#/challenge）
+│   │   ├── challenge.js       # 挑战模式：3 种答题模式 + 生命值 + 限时 + 难度筛选
+│   │   └── wrongwords.js      # 错题集：挑战错词收集 + 分类筛选 + 导出
 │   │
 │   ├── widgets/
 │   │   ├── categoryFilter.js  # 分类筛选组件（全部/四级/六级/半导体专业/其他）
@@ -35,25 +47,34 @@ d:\gxj\code\wordlearing/
 │   │   └── wordCard.js        # 单词卡片组件（熟悉✓/收藏⭐/删除✕）
 │   │
 │   └── utils/
-│       ├── parser.js          # 导入导出工具（CSV/JSON解析）
+│       ├── parser.js          # 导入导出工具（CSV/JSON 解析 + 收藏夹/错题集导出）
+│       ├── sorter.js          # 通用排序模块（WordSorter，6 种排序模式）
+│       ├── achievements.js    # 成就系统（AchievementHelper，10 个成就）
 │       ├── notifications.js   # 桌面通知提醒
 │       └── stats.js           # 统计图表（Chart.js）
 │
 ├── assets/
-│   ├── words_cet4.json        # 四级词库数据文件
-│   ├── words_cet6.json        # 六级词库数据文件
-│   └── .gitkeep
+│   ├── words_cet4.json        # 四级词库
+│   ├── words_cet6.json        # 六级词库
+│   ├── words_ky.json          # 考研词库（split_csv.js 生成）
+│   ├── words_toefl.json       # 托福词库（split_csv.js 生成）
+│   ├── words_ielts.json       # 雅思词库（split_csv.js 生成）
+│   ├── words_gre.json         # GRE 词库（split_csv.js 生成）
+│   ├── words_gk.json          # 高考词库（split_csv.js 生成）
+│   └── words_zk.json          # 中考词库（split_csv.js 生成）
 │
-├── docs/
-│   ├── project_overview.md    # 本文档
-│   ├── favorites_analysis.md  # 收藏夹全链路分析
-│   └── bug_tracker.md         # Bug 跟踪（待建）
+├── scripts/
+│   └── split_csv.js           # 从 ecdict.csv 按 tag 拆分多词书
 │
-└── other/
-    ├── download_words.py      # 词库数据下载脚本
-    ├── ecdict.csv             # 词典源数据
-    ├── server.py              # Python 开发服务器
-    └── start.bat              # 启动脚本
+└── docs/
+    ├── project_overview.md    # 本文档
+    ├── favorites_analysis.md  # 收藏夹全链路分析
+    ├── import_guide.md        # 导入指南
+    └── ai/                    # ← AI 辅助上下文（供 Cursor/Claude 等使用）
+        ├── context.md
+        ├── architecture.md
+        ├── rules.md
+        └── tasks.md
 ```
 
 ---
@@ -63,11 +84,12 @@ d:\gxj\code\wordlearing/
 | 技术 | 用途 |
 |------|------|
 | **纯 HTML + CSS + JS** | 无框架、无构建工具、零依赖 |
-| **IndexedDB** | 本地数据库（浏览器持久存储） |
-| **Hash 路由** (`#/home`) | 5 个页面切换，无需后端 |
+| **IndexedDB** | 本地数据库（浏览器持久存储，4 个对象仓库） |
+| **Hash 路由** (`#/home`) | 6 个页面切换，无需后端 |
 | **Chart.js** | 学习趋势折线图（内置于 `js/lib/`） |
 | **Web Notifications API** | 每日复习桌面通知 |
 | **WebRTC** | 获取局域网 IP（设置页展示） |
+| **Node.js** | 词书拆分脚本 `scripts/split_csv.js` |
 | **Python / npx http-server** | 开发服务器（解决同源策略 + 强制无缓存） |
 
 ---
@@ -78,11 +100,11 @@ d:\gxj\code\wordlearing/
 双击 start.bat / npx http-server -p 3000 -c-1
   └→ 浏览器打开 http://localhost:3000
       └→ 加载 index.html
-          └→ 按顺序加载 14 个 JS 文件
+          └→ 按顺序加载 22 个 JS 文件
               └→ DOMContentLoaded 触发
                   └→ app.js: new WordWizApp().init()
                       1. WordDB.open()              → 打开 IndexedDB
-                      2. initializeDefaults()       → 创建默认词书 + 迁移孤儿数据
+                      2. initializeDefaults()       → 创建默认词书 + 迁移孤儿数据 + 预置 200 词
                       3. autoCleanTrash(30)         → 清理过期回收站
                       4. 绑定导航按钮 → 只设 location.hash
                       5. 监听 hashchange → 唯一渲染入口
@@ -91,15 +113,20 @@ d:\gxj\code\wordlearing/
 
 ---
 
-## 四、导航与路由（v5 架构）
+## 四、导航与路由
 
-### 路由机制
+### 路由表
 
-```
-Hash 路由: #/home, #/favorites, #/trash, #/settings, #/challenge
-```
+| Hash | 页面 | 类名 |
+|------|------|------|
+| `#/home` | 学习首页 | `HomePage` |
+| `#/favorites` | 收藏夹 | `FavoritesPage` |
+| `#/trash` | 回收站 | `TrashPage` |
+| `#/settings` | 设置 | `SettingsPage` |
+| `#/challenge` | 挑战模式 | `ChallengePage` |
+| `#/wrong-words` | 错题集 | `WrongWordsPage` |
 
-### 渲染流程（v5 重写后）
+### 渲染流程
 
 ```
 导航按钮点击 → 只设 location.hash
@@ -111,6 +138,19 @@ Hash 路由: #/home, #/favorites, #/trash, #/settings, #/challenge
                           └─→ 如果是过时的 generation → 丢弃结果
 ```
 
+### generation 锁防异步竞态
+
+```javascript
+this.generation = 0;
+_renderPage(page) {
+    const gen = ++this.generation;
+    // ... await 异步操作 ...
+    if (gen !== this.generation) return; // 过时，丢弃
+}
+```
+
+**解决：** 快速切换页面时两个 async render 先后完成、后者覆盖前者的问题。
+
 ### 状态管理 — `window.AppState`
 
 ```javascript
@@ -121,51 +161,23 @@ window.AppState = {
         wordOrders: {},         // 每个单元内单词排列顺序 { unitId: [...] }
     },
     favorites: {
-        shuffled: false,
-        shuffledOrder: [],
+        category: '全部',
+        sortMode: 'default',
+        shuffledWords: null,
     }
 }
 ```
-
-**AppState 解决了什么问题：**
-1. **全局混序跨页面保持** — 混序结果存 AppState，切换页面再回来不会重置
-2. **onUpdate 不重新随机** — 修改熟悉度/收藏后回调刷新，按已存排列重渲染
-3. **分类/词书切换自动重置** — 切换时 `shuffled = false`
-
-### generation 锁解决异步竞态
-
-```javascript
-this.generation = 0; // app.js
-
-_renderPage(page) {
-    const gen = ++this.generation;
-    // ... await 异步操作 ...
-    if (gen !== this.generation) return; // 过时，丢弃
-}
-```
-
-**解决了：** 快速切换页面时，两个 async render 先后完成，后者覆盖前者的问题（收藏夹 Bug 根因）。
 
 ---
 
 ## 五、数据库结构（IndexedDB）
 
-| 对象仓库 (表) | keyPath | 索引 | 说明 |
-|---------------|---------|------|------|
+| 对象仓库 | keyPath | 索引 | 说明 |
+|---------|---------|------|------|
 | `words` | `id` (autoIncrement) | `word`, `category`, `unit`, `book_id`, `is_favorite`, `deleted_at`, `familiarity` | 单词主表 |
 | `books` | `id` (autoIncrement) | `name` | 词书表 |
 | `settings` | `key` | — | 键值对设置 |
 | `stats` | `id` (autoIncrement) | `date`, `type` | 学习统计 |
-
-### 数据库版本历史
-
-| 版本 | 变更 |
-|------|------|
-| v1 (初始) | words 表 |
-| v2 | 加 book_id 索引 |
-| v3 | 加 settings 表、stats 表、books 表 |
-| v4 | — |
-| v5 | — |
 
 ### 数据模型 — `words` 表字段
 
@@ -185,25 +197,29 @@ _renderPage(page) {
 
 ---
 
-## 六、数据流
+## 六、全局变量一览
 
-```
-用户操作
-    │
-    ▼
-Hash 路由变化 (app.js)
-    │
-    ▼
-_renderPage(page) ──→ 对应 Page.render(container)
-                            │
-                            ├── 设置 container.innerHTML
-                            ├── 绑定事件监听器
-                            ├── 调用 WordDB.xxx() 查询/写入
-                            └── 渲染 DOM（单词/单元/卡片）
-    │
-    ▼
-onUpdate 回调 → 重新调 _renderPage 或 _renderXxxList
-```
+| 变量 | 类型 | 说明 |
+|------|------|------|
+| `window.WordDB` | `WordDatabase` 实例 | 数据库操作入口 |
+| `window.WordModel` | 类 | 数据模型工厂 |
+| `window.WordCard` | 类 | 单词行组件（静态） |
+| `window.UnitCard` | 类 | 单元卡片组件（静态） |
+| `window.CategoryFilter` | 类 | 分类筛选组件（静态） |
+| `window.HomePage` | 类 | 首页页面（静态） |
+| `window.FavoritesPage` | 类 | 收藏夹页面（静态） |
+| `window.TrashPage` | 类 | 回收站页面（静态） |
+| `window.SettingsPage` | 类 | 设置页面（静态） |
+| `window.ChallengePage` | 类 | 挑战模式页面（静态） |
+| `window.WrongWordsPage` | 类 | 错题集页面（静态） |
+| `window.HomeShuffle` | 类 | 首页排序工具（静态） |
+| `window.WordSorter` | 类 | 通用排序模块（静态） |
+| `window.AchievementHelper` | 类 | 成就系统（静态） |
+| `window.WordParser` | 类 | 导入导出工具（静态） |
+| `window.NotificationHelper` | 类 | 桌面通知工具（静态） |
+| `window.StatsHelper` | 类 | 统计图表工具（静态） |
+| `window.Toast` | 对象 | Toast 通知 `{ show(msg) }` |
+| `window.AppState` | 对象 | 全局 UI 状态 |
 
 ---
 
@@ -218,50 +234,57 @@ onUpdate 回调 → 重新调 _renderPage 或 _renderXxxList
 | 模糊搜索 | `home.js` | 300ms 防抖，匹配单词和释义，点击定位到单元 |
 | 单元展开/折叠 | `unitCard.js` | 点击单元标题展开/收起 |
 | 单元混序 | `unitCard.js` | 点击 🔀 打乱当前单元单词顺序 |
-| **全局混序** | `home.js` | 🔀 按钮打乱所有单元顺序和单元内单词顺序，状态存 AppState |
+| 全局混序 | `home.js` | 🔀 按钮打乱所有单元顺序和单词顺序，跨页面保持 |
 | 熟悉度系统 | `wordCard.js` | 0~5 级，点击 ✓ 增加，圆点显示进度 |
 | 收藏/取消收藏 | `wordCard.js` | ⭐ 按钮即点即切 |
 | 软删除 | `wordCard.js` | ✕ 按钮移入回收站 |
 
 ### 收藏夹 (`#/favorites`)
 
-| 功能 | 说明 |
-|------|------|
-| 所有收藏单词独立展示 | 不受词书过滤影响 |
-| 分类筛选 | 同上分类组件 |
-| 排序 | 默认 / 熟悉度升序 / 降序 |
-| 混序学习 | 🔀 按钮打乱顺序 |
+| 功能 | 文件 | 说明 |
+|------|------|------|
+| 所有收藏单词独立展示 | `favorites.js` | 不受词书过滤影响 |
+| 分类筛选 | `categoryFilter.js` | 同上类别 |
+| 6 种排序模式 | `sorter.js` | 默认/熟悉度↑/熟悉度↓/A-Z/Z-A/随机混序 |
+| 混序学习 | `favorites.js` | 🔀 按钮配合 AppState 保持 |
+| 导出 JSON/CSV | `favorites.js` | 「📤 导出」按钮 → 下拉菜单 |
 
 ### 回收站 (`#/trash`)
 
-| 功能 | 说明 |
-|------|------|
-| 查看已删除单词 | 显示删除时间 |
-| 恢复单词 | 回到原词书 |
-| 永久删除 | 从数据库彻底移除 |
-| 一键清空 | 清空所有回收站 |
-| 自动清理 | 超过 30 天自动删除（启动时执行） |
+| 功能 | 文件 | 说明 |
+|------|------|------|
+| 查看已删除单词 | `trash.js` | 显示删除时间 |
+| 恢复单词 | `trash.js` | 回到原词书 |
+| 永久删除 | `trash.js` | 从数据库彻底移除 |
+| 一键清空 | `trash.js` | 清空所有回收站 |
+| 自动清理 | `connection.js` | 超过 30 天自动删除（启动时执行） |
 
-### 挑战 (`#/challenge`)
+### 挑战模式 (`#/challenge`)
 
-| 功能 | 说明 |
-|------|------|
-| 设置菜单 | 题数（10/20/50/100/自定义）、范围（激活词书/全部/按分类），偏好自动保存 |
-| 分类动态获取 | 分类下拉从数据库所有单词的 category 字段去重动态生成 |
-| 随机抽词 | 按设置从指定范围随机抽取题目 |
-| 四选一答题 | 显示英文，选择正确中文释义（含 3 个干扰项） |
-| 计时 | 答题过程中实时显示用时 |
-| 连对计数 | 连续答对时显示 🔥 N 连对 |
-| 即时反馈 | 选完立即显示正确/错误，高亮正确选项 |
-| 熟悉度联动 | 答对熟悉度+1（上限5），答错-1（下限0） |
-| 冷却机制 | 7 天内已挑战过的单词不会重复出现 |
-| 结果页 | 显示正确数、错误数、用时、正确率环形图、最大连对 |
-| 错题回顾 | 列出答错的单词和正确释义 |
-| 再来一次 | 重新按设置随机抽题挑战 |
-| 挑战记录 | 每次结果自动保存，在设置页可查看最近 20 条 |
-| 成就触发 | 5 个挑战成就自动检测解锁 |
-| 状态机 | `start → playing → result` 三态切换 |
+| 功能 | 文件 | 说明 |
+|------|------|------|
+| 3 种答题模式 | `challenge.js` | 四选一 / 汉→英拼写（首字母提示） / 英→汉拼写 |
+| 难度筛选 | `challenge.js` | 简单（熟悉度≥3）/ 普通（全部）/ 困难（熟悉度≤2） |
+| 生命值模式 | `challenge.js` | 3 条命，答错扣 1 |
+| 限时模式 | `challenge.js` | 每题 10 秒超时 |
+| 错题集专项练习 | `challenge.js` | rangeType: 'wrong-words' |
+| 设置持久化 | `challenge.js` | settings 表存储 mode/difficulty/lives/timed |
+| 即时反馈 | `challenge.js` | 选完立即显示正确/错误，高亮正确选项 |
+| 熟悉度联动 | `challenge.js` | 答对+1（上限5），答错-1（下限0） |
+| 冷却机制 | `challenge.js` | 7 天已挑战单词不重复 |
+| 结果页 | `challenge.js` | 成绩/环图/错题回顾/冷却记录/成就触发 |
+| 挑战记录 | `challenge.js` | 最近 20 条历史保存，设置页可查看 |
 
+### 错题集 (`#/wrong-words`)
+
+| 功能 | 文件 | 说明 |
+|------|------|------|
+| 挑战错词自动收集 | `wrongwords.js` | 挑战答错的单词自动加入 |
+| 分类筛选 | `wrongwords.js` | 按类别过滤错题 |
+| 单项删除 | `wrongwords.js` | 移除单个错题 |
+| 一键清空 | `wrongwords.js` | 「🗑️ 清空错题」按钮 |
+| 导出 JSON/CSV | `wrongwords.js` | 「📤 导出」按钮 → 下拉菜单 |
+| 统计展示 | `wrongwords.js` | 错题总数和分类分布 |
 
 ### 设置 (`#/settings`)
 
@@ -272,8 +295,9 @@ onUpdate 回调 → 重新调 _renderPage 或 _renderXxxList
 | 导入 | `settings.js` + `parser.js` | CSV/JSON 导入，自动创建词书 |
 | 导出 | `settings.js` + `parser.js` | 导出为 JSON/CSV |
 | 每日提醒 | `notifications.js` | 桌面通知，可设时间 |
-| 局域网访问 | `settings.js` | 自动获取 IP 地址 |
+| 局域网访问 | `settings.js` | WebRTC 获取 IP 地址 |
 | 重置数据库 | `settings.js` | 清空所有数据重新初始化 |
+| 成就墙 | `achievements.js` | 10 个成就展示（5 学习 + 5 挑战） |
 
 ---
 
@@ -291,119 +315,68 @@ onUpdate 回调 → 重新调 _renderPage 或 _renderXxxList
  9. utils/parser.js            (导入导出)
 10. utils/notifications.js     (通知)
 11. utils/stats.js             (统计图表)
-12. widgets/categoryFilter.js  (分类筛选)
-13. widgets/wordCard.js        (单词卡片)
-14. widgets/unitCard.js        (单元卡片)
-15. screens/home/shuffle.js    (混序工具)
-16. screens/home.js            (首页)
-17. screens/favorites.js       (收藏夹)
-18. screens/trash.js           (回收站)
-19. screens/settings.js        (设置)
-20. screens/challenge.js       (挑战模式)
-21. app.js                     (★ 主入口，最后加载)
+12. utils/sorter.js            (通用排序模块)
+13. utils/achievements.js      (成就系统)
+14. widgets/categoryFilter.js  (分类筛选)
+15. widgets/wordCard.js        (单词卡片)
+16. widgets/unitCard.js        (单元卡片)
+17. screens/home/shuffle.js    (混序工具)
+18. screens/home.js            (首页)
+19. screens/favorites.js       (收藏夹)
+20. screens/trash.js           (回收站)
+21. screens/settings.js        (设置)
+22. screens/challenge.js       (挑战模式)
+23. screens/wrongwords.js      (错题集)
+24. app.js                     (★ 主入口，最后加载)
 ```
 
-⚠️ **重要：** 顺序不能乱 — 例如 `db.js` 依赖 `WordModel`，`unitCard.js` 依赖 `WordCard`，`app.js` 依赖所有页面。
+⚠️ **顺序不能乱** — 依赖关系严格。
 
 ---
 
-## 九、Bug 历史
+## 九、多词书拆分（scripts/split_csv.js）
 
-### v5 修复 — commit 8a52c20
+基于 [ECDICT](https://github.com/skywind3000/ECDICT) (MIT License) 的 tag 列，生成 6 本词书：
 
-| ID | 文件 | 严重级 | 问题 | 修复 |
-|----|------|--------|------|------|
-| B9 | `app.js` | P0 🔴 | 收藏夹 `_renderPage` 先设 hash 又直接调 render，两个 async 异步竞态 | 严格只走 hashchange 一条路径 + generation 锁 |
-| B8 | `home.js` | P2 🟡 | 混序每次 onUpdate 重新随机，点 ✓ 收藏后顺序又变 | 混序结果存 AppState，onUpdate 按存储排列重渲染 |
+| 文件 | 内容 | 单词数 | 单元数 |
+|------|------|--------|--------|
+| `words_ky.json` | 考研词汇 (ky) | 4,801 | 49 |
+| `words_toefl.json` | 托福词汇 (toefl) | 6,974 | 70 |
+| `words_ielts.json` | 雅思词汇 (ielts) | 5,040 | 51 |
+| `words_gre.json` | GRE 词汇 (gre) | 7,504 | 76 |
+| `words_gk.json` | 高考词汇 (gk) | 3,677 | 37 |
+| `words_zk.json` | 中考词汇 (zk) | 1,603 | 17 |
 
-### v4 修复 — commit 65d6e0b
-
-| ID | 文件 | 严重级 | 问题 |
-|----|------|--------|------|
-| B1 | `favorites.js` | P0 🔴 | 收藏夹传了 activeBookIds 参数，词书未勾选时收藏单词不显示 |
-| B2 | `favorites.js` | P0 🔴 | familiarity 为 undefined 导致排序 NaN 崩溃 |
-| B3 | `favorites.js` | P0 🔴 | 脏数据跳过时列表空白无提示 |
-| B4 | `unitCard.js` | P0 🔴 | dataset.id 为 NaN 时排序崩溃 |
-| B5 | `app.js` | P0 🔴 | 无 try-catch，任一页面报错白屏 |
-| B6 | `index.html` | P0 🔴 | 浏览器缓存旧 JS |
-
-### v3 修复 — commit 36b7b09
-
-| ID | 文件 | 严重级 | 问题 |
-|----|------|--------|------|
-| B7 | `app.js` | P0 🔴 | 导航按钮有 `page === currentPage return`，同页面无法重试 |
+> 运行 `node scripts/split_csv.js` 生成，格式与现有 JSON 兼容<br>
+> 注意：ecdict 中无 spoken/simple/computer/IT/ic/ai 标签，暂无法生成口语和计算机词书
 
 ---
 
-## 十、核心文件评分
-
-| 优先级 | 文件 | 行数 (约) | 为什么重要 |
-|--------|------|-----------|-----------|
-| ⭐⭐⭐ | **`js/app.js`** | ~200 | 应用入口、路由调度、全局状态、generation 锁 |
-| ⭐⭐⭐ | **`js/db.js`** | ~400 | 所有数据的读写都通过它 |
-| ⭐⭐⭐ | **`index.html`** | — | 唯一 HTML，JS 加载顺序决定依赖关系 |
-| ⭐⭐ | **`js/screens/home.js`** | ~250 | 最复杂的页面：词书+分类+搜索+全局混序 |
-| ⭐⭐ | **`js/screens/favorites.js`** | ~130 | Bug 最多的页面（v4 修复 3 个 P0） |
-| ⭐ | **`js/widgets/wordCard.js`** | ~80 | 被所有页面引用的通用卡片组件 |
-| ⭐ | **`js/screens/settings.js`** | ~200 | 词书管理+导入导出+统计 |
-
----
-
-## 十一、开发指南
-
-### 启动
-
-```bash
-# 方法 1（推荐）
-双击 start.bat
-
-# 方法 2
-npx http-server d:\gxj\code\wordlearing -p 3000 -c-1 --cors
-
-# 方法 3
-python server.py
-```
-
-然后浏览器访问 **http://localhost:3000**
-
-### 开发新页面
-
-1. 在 `js/screens/` 下新建 `xxx.js`
-2. 实现 `class XxxPage { static async render(container) { ... } }`
-3. 导出到全局：`window.XxxPage = XxxPage`
-4. 在 `index.html` 中添加 `<script>` 引用
-5. 在 `app.js` 的 `_renderPage` switch 中注册路由
-
-### 数据库操作示例
-
-```javascript
-// 查询
-await WordDB.getAllWords()
-await WordDB.getWordsByCategory('四级', [1, 2])
-await WordDB.getFavoriteWords('全部')
-
-// 写入
-await WordDB.addWord({ word: 'hello', definition: '你好', ... })
-await WordDB.updateWord(id, { familiarity: 3 })
-await WordDB.toggleFavorite(id)
-await WordDB.softDeleteWord(id)
-```
-
-### 提交
-
-```bash
-git add .
-git commit -m "描述改动"
-```
-
----
-
-## 十二、Git 版本记录
+## 十、Git 版本记录
 
 ```
+5ccc39c (HEAD) feat: 综合复盘 — 文档同步 + CSS 增强 + 多词书拆分
+b051fd1 feat: 导航菜单响应式折叠+高亮+淡入淡出动画
+3dc47e0 feat: 增强排序功能 - 6种排序模式+状态保持
+70bce09 挑战模式增强 + 成就系统扩展 + 错题集页面
 8a52c20 v5 架构重写：路由+混序+收藏夹+单元卡片
+7d4b277 fix: 收藏夹导航竞态 + _addBatch 主键冲突 + 全局混序
+5f42a18 fix: 首页 onUpdate 空函数 + 通知图标修复
+fc76349 docs: 收藏夹全链路分析 + Bug全量审查结果(19个)
+36b7b09 fix: 导航按钮同页面不刷新 + 更新完整项目文档
 24b454e fix: 彻底解决缓存问题 + 改用http-server(c-1)
-65d6e0b fix: P0 bugs - 收藏夹词书过滤/排序兜底/空列表检测/NaN容错
-36b7b09 fix: 导航修复 - 移除同页面跳过判断
-4fbad58 WordWiz v3 initial commit
+```
+
+---
+
+## 十一、数据流
+
+```
+用户操作 → Hash 路由变化 (app.js) → _renderPage(page)
+    └→ Page.render(container)
+        ├── 设置 container.innerHTML
+        ├── 绑定事件监听器
+        ├── 调用 WordDB.xxx() 查询/写入 IndexedDB
+        └── 渲染 DOM（单词/单元/卡片）
+            └→ onUpdate 回调 → 重新调 _renderPage 或 _renderXxxList
 ```

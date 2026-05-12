@@ -53,10 +53,19 @@ d:\gxj\code\wordlearing/
 │
 ├── assets/
 │   ├── words_cet4.json                 # 四级词库
-│   └── words_cet6.json                 # 六级词库
+│   ├── words_cet6.json                 # 六级词库
+│   ├── words_ky.json                   # 考研词库（split_csv.js 生成）
+│   ├── words_toefl.json                # 托福词库（split_csv.js 生成）
+│   ├── words_ielts.json                # 雅思词库（split_csv.js 生成）
+│   ├── words_gre.json                  # GRE 词库（split_csv.js 生成）
+│   ├── words_gk.json                   # 高考词库（split_csv.js 生成）
+│   └── words_zk.json                   # 中考词库（split_csv.js 生成）
 │
-├── scripts/                            # 工具脚本（计划新增）
-│   └── (split_csv.js 等)
+├── scripts/
+│   ├── split_csv.js                    # 从 ecdict.csv 按 tag 拆分多词书
+│   ├── split_csv.py                    # Python 版（实验性）
+│   ├── check_tags.js                   # 检查 ecdict.csv 中各 tag 分布
+│   └── test_csv.py                     # CSV 测试脚本
 │
 └── docs/
     ├── project_overview.md             # 项目总文档

@@ -996,6 +996,19 @@ body::before {
 }
 
 /* 挑战答题选项 */
+.challenge-option {
+    display: block;
+    width: 100%;
+    padding: 10px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 15px;
+    cursor: pointer;
+    transition: var(--transition);
+    text-align: left;
+}
 .challenge-option:hover {
     border-color: var(--accent-blue);
     background: var(--bg-hover);
@@ -1004,4 +1017,18 @@ body::before {
 }
 .challenge-option:active {
     transform: scale(0.98);
+}
+.challenge-option.correct {
+    border-color: var(--accent-green);
+    background: rgba(74, 222, 128, 0.12);
+    box-shadow: 0 0 8px rgba(74, 222, 128, 0.3);
+}
+.challenge-option.wrong {
+    border-color: var(--accent-red);
+    background: rgba(255, 82, 82, 0.12);
+    box-shadow: 0 0 8px rgba(255, 82, 82, 0.3);
+}
+.challenge-option:disabled {
+    cursor: default;
+    opacity: 0.8;
 }

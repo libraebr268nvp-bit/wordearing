@@ -46,6 +46,10 @@
 | 挑战熟悉度联动（答对+1，答错-1） | 挑战 | `challenge.js` | ✅ |
 | ECDICT 下载脚本 | 根目录 | `download_words.py` | ✅ |
 | CSV 源文件 | 根目录 | `ecdict.csv` | ✅ |
+| 挑战增强：3 种模式/难度/生命值/限时 | 挑战 | `challenge.js` | ✅ (5ccc39c) |
+| 收藏夹/错题集导出（JSON/CSV） | 收藏夹/错题集 | `favorites.js` + `wrongwords.js` + `parser.js` | ✅ (5ccc39c) |
+| 多词书拆分（考研/托福/雅思/GRE/高考/中考） | 脚本 | `scripts/split_csv.js` | ✅ (本任务) |
+| 移动端单词卡片适配 | CSS | `css/style.css` | ✅ (5ccc39c) |
 
 ---
 
@@ -53,16 +57,22 @@
 
 | ID | 文件 | 严重级 | 问题 | 状态 |
 |----|------|--------|------|------|
-| B10 | `db.js:39-42` | P1 🟡 | `onupgradeneeded` 中给旧 words 表创建 book_id 索引时，如果索引已存在，重复创建抛异常 | 待修复 |
-| B11 | `db.js:237-248` | P1 🟡 | `_addBatch` 中某条写入失败时 Promise 不 resolve | 待修复 |
-| B12 | `home.js:96` | P2 🟢 | 搜索框点击外部关闭事件与点击搜索结果冲突 | 待修复 |
-| B13 | `settings.js:22` | P2 🟢 | 导入时用 confirm() 询问覆盖，用户不操作时卡住 | 待修复 |
-| B14 | `settings.js:186` | P2 🟢 | 提醒日期计算使用本地时区 | 待修复 |
-| B15 | `db.js:254-274` | P2 🟢 | `_getAllRaw` 降级 `openCursor` 无二次容错 | 待修复 |
-| B16 | `categoryFilter.js:8` | P3 ⚪ | 分类硬编码，不随数据库动态生成 | 待修复 |
-| B17 | `notifications.js:13` | P3 ⚪ | 通知图标路径不存在 | 待修复 |
-| B18 | `settings.js:170` | P3 ⚪ | WebRTC 获取 IP 超时时显示英文 | 待修复 |
-| B19 | `favorites.js` | P3 ⚪ | 收藏夹用了 unit-card 样式类名 | 待修复 |
+| B10 | `db/connection.js` | 🟡 P1 | `onupgradeneeded` 中给旧 words 表创建 book_id 索引时，索引已存在则抛异常 | 待修复 |
+| B11 | `db/connection.js` | 🟡 P1 | `_addBatch` 某条写入失败时 Promise 不 resolve | 待修复 |
+| B12 | `home.js:96` | 🟢 P2 | 搜索框点击外部关闭事件与搜索结果点击冲突 | 待修复 |
+| B13 | `settings.js:22` | 🟢 P2 | 导入用 confirm() 询问，用户不操作时卡住 | 待修复 |
+| B14 | `settings.js:186` | 🟢 P2 | 提醒日期计算使用本地时区 | 待修复 |
+| B15 | `db/connection.js` | 🟢 P2 | `_getAllRaw` 降级 `openCursor` 无二次容错 | 待修复 |
+| B16 | `categoryFilter.js` | ⚪ P3 | 分类硬编码，不随数据库动态生成 | 待修复 |
+| B17 | `notifications.js:13` | ⚪ P3 | 通知图标路径不存在 | 待修复 |
+| B18 | `settings.js:170` | ⚪ P3 | WebRTC 获取 IP 超时时显示英文 | 待修复 |
+| B19 | `favorites.js` | ⚪ P3 | 收藏夹用了 unit-card 样式类名 | 待修复 |
+| B20 | `challenge.js` | 🟡 P1 | 错题集模式性能风险：逐条 `await WordDB.getWordById(id)` 循环查询，极端 200 次异步查询 | 待修复 |
+| B21 | `challenge.js` | 🟢 P2 | 限时与生命值模式同时开启时可能重复扣命 | 待修复 |
+| B22 | `challenge.js` | ⚪ P3 | 拼写模式提示过于简单且大小写敏感 | 待修复 |
+| B23 | `challenge.js` | ⚪ P3 | 设置持久化读取没有版本兼容（已有防御） | 注意即可 |
+| B24 | `challenge.js` | ⚪ P3 | `_cleanRecentWords()` 遍历全量冷却记录，数据膨胀后有延迟 | 待优化 |
+| B25 | `wrongwords.js` | ⚪ P3 | 单项删除后重渲染全量列表，缺少虚拟滚动或分页 | 跟踪 |
 
 ### 已修复的 Bug
 | ID | 版本 | 问题 | 修复 |
@@ -75,16 +85,17 @@
 
 ## 📋 待开发
 
-### 改进任务（来自复盘分析）
+### 改进任务（按优先级排列）
 | ID | 模块 | 优先级 | 说明 |
 |----|------|--------|------|
-| T01 | `css/style.css` | P1 🔴 | 移动端单词卡片释义竖排（<768px 时释义区域过窄） |
-| T02 | `scripts/split_csv.js` | P1 🔴 | 拆分 ecdict.csv 生成多本词汇书（考研/托福/雅思/口语/专业英语） |
 | T03 | `categoryFilter.js` | P2 🟡 | 分类硬编码 → 改为动态从数据库读取分类列表 |
-| T04 | `css/style.css` | P2 🟡 | 移动端导航栏适配优化 |
+| T04 | `css/style.css` | P2 🟡 | 移动端导航栏折叠动画可优化 |
 | T05 | `favorites.js` | P3 🟢 | 收藏夹使用了 unit-card 样式类名，应改用独立类名 |
 | T06 | `home.js` | P3 🟢 | 搜索框点击外部关闭与搜索结果点击冲突 |
-| T07 | `app.js` | P3 🟢 | 考虑用 page.js 或自建轻量路由替换 switch-case |
-| T08 | 全局 | P3 🟢 | 添加页面间过渡动画 |
+| T07 | `app.js` | P3 🟢 | 路由 switch-case 可抽象为路由表 |
+| T08 | 全局 | P3 🟢 | 添加页面间过渡动画（目前只有 .page-fade-in） |
 | T09 | `settings.js` | P3 🟢 | 导入时 confirm() 改为模态框，避免卡住 |
-| T10 | 全局 | P4 ⚪ | 考虑引入 Service Worker 实现 PWA 离线缓存 |
+| T10 | 全局 | P4 ⚪ | Service Worker + PWA 离线缓存 |
+| T11 | `challenge.js` | P4 ⚪ | 拼写模式增加逐字母提示、自动纠错 |
+| T12 | 全局 | P4 ⚪ | 引入单元测试（至少对 parser/sorter/model） |
+| T13 | `down_words.py` | P4 ⚪ | Python 脚本可扩展参数支持自定义筛选 |
