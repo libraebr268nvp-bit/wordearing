@@ -1,6 +1,6 @@
 # 收藏夹功能全链路分析
 
-> 按文件提取所有与收藏功能相关的代码，包含行号参考。
+> 基于当前代码（2026-05，v6 架构）梳理收藏功能完整链路
 
 ---
 
@@ -16,42 +16,42 @@
 
 ```javascript
 // word.js - WordModel.create() 参数解构
-static create({ id, word, definition, category = '四级', unit = 1, book_id = 1,
-                 familiarity = 0, is_favorite = false, book_source = '内置词库',
-                 deleted_at = null, created_at = null } = {}) {
-    // ...
-    is_favorite: !!is_favorite,
-    // ...
+static create({ ..., is_favorite = false, ... } = {}) {
+    return {
+        // ...
+        is_favorite: !!is_favorite,
+        // ...
+    };
 }
 
-// word.js - WordModel.fromRow() 容错转换
+// word.js - WordModel.fromRow() 容错转换（兼容 0/1 整数和布尔值）
 is_favorite: row.is_favorite === 1 || row.is_favorite === true,
 ```
 
 ---
 
-## 二、数据库层 — `js/db.js`
+## 二、数据库层 — `js/db/words.dao.js`
 
-### `db.js` — 收藏相关方法
+### 收藏相关方法
 
 ```javascript
-// === toggleFavorite(id) — 切换收藏状态 ===
-async toggleFavorite(id) {
+// toggleFavorite(id) — 切换收藏状态
+WordDatabase.prototype.toggleFavorite = async function(id) {
     const word = await this.getWordById(id);
     if (!word) return null;
     return this.updateWord(id, { is_favorite: !word.is_favorite });
-}
+};
 
-// === softDeleteWord(id) — 软删除时自动取消收藏 ===
-async softDeleteWord(id) {
+// softDeleteWord(id) — 软删除时自动取消收藏
+WordDatabase.prototype.softDeleteWord = async function(id) {
     return this.updateWord(id, { 
         deleted_at: new Date().toISOString(),
-        is_favorite: false  // ← 删除时强制取消收藏
+        is_favorite: false    // ← 删除时强制取消收藏
     });
-}
+};
 
-// === getFavoriteWords(category, bookIds) — 获取收藏单词 ===
-async getFavoriteWords(category = null, bookIds = null) {
+// getFavoriteWords(category, bookIds) — 获取收藏单词
+WordDatabase.prototype.getFavoriteWords = async function(category = null, bookIds = null) {
     let words;
     if (bookIds) {
         words = await this.getWordsByBooks(bookIds);
@@ -63,25 +63,25 @@ async getFavoriteWords(category = null, bookIds = null) {
         words = words.filter(w => w.category === category);
     }
     return words;
-}
+};
 ```
 
 ### 调用的基础方法
 
 ```javascript
 // getAllWords() → 遍历 words 表，按 _isNotDeleted 过滤 → WordModel.fromRow()
-async getAllWords() {
+WordDatabase.prototype.getAllWords = async function() {
     const results = await this._getAllRaw('words', (row) => this._isNotDeleted(row));
     return results.map(r => WordModel.fromRow(r)).filter(r => r !== null);
-}
+};
 
-// getWordsByBooks(bookIds) → 按 book_id 过滤未删除单词
-async getWordsByBooks(bookIds) {
+// getWordsByBooks(bookIds) → 按 book_ids 多归属过滤未删除单词
+WordDatabase.prototype.getWordsByBooks = async function(bookIds) {
     const results = await this._getAllRaw('words', row => 
-        this._isNotDeleted(row) && bookIds.includes(row.book_id)
+        this._isNotDeleted(row) && WordModel.belongsToBook(row, bookIds)
     );
     return results.map(r => WordModel.fromRow(r)).filter(r => r !== null);
-}
+};
 ```
 
 ---
@@ -97,7 +97,7 @@ favBtn.className = `action-btn favorite ${word.is_favorite ? 'favorited' : ''}`;
 favBtn.title = word.is_favorite ? '取消收藏' : '收藏';
 favBtn.textContent = '⭐';
 
-// 点击事件
+// 点击事件 — 调 WordDB.toggleFavorite(id) 切换
 favBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
     const updated = await WordDB.toggleFavorite(word.id);
@@ -105,7 +105,7 @@ favBtn.addEventListener('click', async (e) => {
         favBtn.classList.toggle('favorited');
         favBtn.title = updated.is_favorite ? '取消收藏' : '收藏';
         window.Toast.show(updated.is_favorite ? '⭐ 已收藏' : '已取消收藏');
-        if (options.onUpdate) options.onUpdate();
+        if (options.onUpdate) options.onUpdate();  // ← 触发列表刷新
     }
 });
 ```
@@ -113,15 +113,15 @@ favBtn.addEventListener('click', async (e) => {
 ### 删除按钮联动
 
 ```javascript
-// 删除时自动调用 softDeleteWord（内部取消收藏）
+// 删除时自动调用 softDeleteWord（内部设 is_favorite = false）
 delBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
     if (confirm(`确定要将 "${word.word}" 移入回收站？`)) {
-        await WordDB.softDeleteWord(word.id);  // ← 内部设 is_favorite = false
+        await WordDB.softDeleteWord(word.id);
         row.classList.add('deleted');
         row.style.display = 'none';
         window.Toast.show(`🗑️ "${word.word}" 已移入回收站`);
-        if (options.onUpdate) options.onUpdate();  // ← 触发收藏夹刷新
+        if (options.onUpdate) options.onUpdate();
     }
 });
 ```
@@ -130,125 +130,39 @@ delBtn.addEventListener('click', async (e) => {
 
 ## 四、UI 页面层 — `js/screens/favorites.js`
 
-### 完整代码（当前最新版本）
+### 当前架构（v6 静态类 + 6 种排序 + 动态分类 + 导出）
 
 ```javascript
 class FavoritesPage {
-    constructor() {
-        this.currentCategory = '全部';
-        this.currentSort = 'default';
-        this.shuffled = false;
+    static async render(container) {
+        // 渲染页面骨架：标题 + 混序/导出按钮 + 分类筛选 + 排序选择器 + 列表
+    }
+    
+    static async _renderFavList(container) {
+        // 1. 调 WordDB.getFavoriteWords(AppState.favorites.category)
+        // 2. 按当前排序模式（WordSorter）排序或混序
+        // 3. 调用 WordCard.render() 逐行渲染
+        // 4. 空状态处理
     }
 
-    async render(container) {
-        container.innerHTML = `
-            <div class="page-header">
-                <div class="page-title">⭐ 收藏夹</div>
-                <div>
-                    <button class="btn btn-sm btn-primary" id="shuffleFavBtn">🔀 混序学习</button>
-                </div>
-            </div>
-            <div id="favCategoryFilter"></div>
-            <div class="sort-group">
-                <span class="sort-label">排序：</span>
-                <button class="sort-btn active" data-sort="default">默认</button>
-                <button class="sort-btn" data-sort="asc">熟悉度 ↑</button>
-                <button class="sort-btn" data-sort="desc">熟悉度 ↓</button>
-            </div>
-            <div id="favList"></div>
-        `;
-
-        // 分类筛选
-        const filterContainer = container.querySelector('#favCategoryFilter');
-        CategoryFilter.render(filterContainer, '全部', (category) => {
-            this.currentCategory = category;
-            this._renderFavList(container);
-        });
-
-        // 排序按钮
-        container.querySelectorAll('.sort-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                container.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                this.currentSort = btn.dataset.sort;
-                this.shuffled = false;
-                document.getElementById('shuffleFavBtn').textContent = '🔀 混序学习';
-                this._renderFavList(container);
-            });
-        });
-
-        // 混序按钮
-        const shuffleBtn = document.getElementById('shuffleFavBtn');
-        if (shuffleBtn) {
-            shuffleBtn.addEventListener('click', () => {
-                this.shuffled = !this.shuffled;
-                shuffleBtn.textContent = this.shuffled ? '🔁 恢复顺序' : '🔀 混序学习';
-                this._renderFavList(container);
-            });
-        }
-
-        await this._renderFavList(container);
-    }
-
-    async _renderFavList(container) {
-        const listContainer = container.querySelector('#favList');
-        if (!listContainer) return;
-        
-        listContainer.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-muted)">⏳ 加载中...</div>';
-
-        try {
-            // P0 修复：不再传 activeBookIds
-            let words = await WordDB.getFavoriteWords(this.currentCategory);
-
-            if (!words || words.length === 0) {
-                listContainer.innerHTML = `...⏳ 加载中...</div>`; break;
-                // P0 修复：空列表检查
-            }
-
-            // 排序（P0 修复：?? 0 兜底）
-            if (this.currentSort === 'asc')
-                words.sort((a, b) => (a.familiarity ?? 0) - (b.familiarity ?? 0));
-            else if (this.currentSort === 'desc')
-                words.sort((a, b) => (b.familiarity ?? 0) - (a.familiarity ?? 0));
-
-            // 混序
-            if (this.shuffled) {
-                for (let i = words.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [words[i], words[j]] = [words[j], words[i]];
-                }
-            }
-
-            // 独立渲染，不依赖 unitCard
-            listContainer.innerHTML = '';
-            const wrapper = document.createElement('div');
-            wrapper.className = 'unit-card';
-            // ...渲染每一个 word
-            for (const word of words) {
-                try {
-                    if (!word || !word.word) continue;
-                    const wordRow = WordCard.render(word, {
-                        onUpdate: () => this._renderFavList(container)
-                    });
-                    if (wordRow) list.appendChild(wordRow);
-                } catch (e) {
-                    console.warn('收藏夹跳过脏数据:', e, word);
-                }
-            }
-            // P0 修复：空列表检测
-            if (list.children.length === 0) {
-                listContainer.innerHTML = `...暂无有效收藏...`;
-                return;
-            }
-            listContainer.appendChild(wrapper);
-        } catch (e) {
-            console.error('收藏夹渲染失败:', e);
-            listContainer.innerHTML = `...加载出错...`;
-        }
+    static _renderSortSelector(container) {
+        // 用 WordSorter.renderSelector() 生成 6 种排序按钮
+        // 默认/熟悉度↑/熟悉度↓/A-Z/Z-A/随机混序
     }
 }
+```
 
-window.FavoritesPage = new FavoritesPage();  // ★ 实例化，而非静态类
+**关键特点：**
+- 使用 `CategoryFilter` 组件（v2 动态分类，不再硬编码）
+- 6 种排序模式通过 `WordSorter` 统一管理
+- 混序状态存储在 `AppState.favorites.shuffledWords`
+- 导出功能内置 「📤 导出」→ JSON / CSV 下拉菜单
+
+### 导出功能（`_setupExport`）
+
+```javascript
+// 使用 WordParser.exportFavoritesToJSON(category) / .exportFavoritesToCSV(category)
+// 通过 Blob + 临时 <a> 触发下载
 ```
 
 ---
@@ -278,7 +192,7 @@ case 'favorites':
 
 ```
 用户点击 ⭐ (wordCard.js)
-    → WordDB.toggleFavorite(id)  (db.js)
+    → WordDB.toggleFavorite(id)  (words.dao.js)
         → updateWord(id, { is_favorite: !word.is_favorite })
             → IndexedDB put
     → 刷新 UI: options.onUpdate()
@@ -286,12 +200,13 @@ case 'favorites':
 用户点击收藏夹导航 (app.js _setupNavigation)
     → this._renderPage('favorites')
         → FavoritesPage.render(container)  (favorites.js)
-            → WordDB.getFavoriteWords(category)  (db.js)
-                → getAllWords() → 遍历所有 is_favorite=true
-            → 渲染单词列表
+            → CategoryFilter.render()      动态分类（从数据库获取）
+            → WordDB.getFavoriteWords()    获取收藏
+            → WordSorter.sort()            排序
+            → WordCard.render()            逐行渲染
 
 用户删除单词 (wordCard.js delBtn)
-    → WordDB.softDeleteWord(id)  (db.js)
+    → WordDB.softDeleteWord(id)  (words.dao.js)
         → updateWord(id, { deleted_at: ..., is_favorite: false })
     → options.onUpdate() → 刷新收藏夹
 ```
@@ -300,13 +215,27 @@ case 'favorites':
 
 ## 七、与收藏夹相关的所有文件总览
 
-| 文件 | 角色 | 关键行 |
-|------|------|--------|
-| `js/models/word.js` | 字段定义 `is_favorite` | create(), fromRow() |
-| `js/db.js` | CRUD：toggleFavorite, getFavoriteWords, softDeleteWord | ~7 个方法 |
-| `js/widgets/wordCard.js` | UI 收藏按钮 ⭐，删除按钮 | 2 个事件绑定 |
-| `js/screens/favorites.js` | 收藏页面完整实现 | 核心渲染逻辑 |
-| `js/app.js` | 路由调度 `_renderPage('favorites')` | 1 个 case |
-| `js/utils/parser.js` | 导出时包含 `is_favorite` 字段 | exportToJSON/CSV |
-| `js/utils/stats.js` | 统计仪表盘显示收藏数 `favoriteCount` | renderDashboard() |
-| `index.html` | 导航按钮 `data-page="favorites"` | 1 个 button |
+| 文件 | 角色 |
+|------|------|
+| `js/models/word.js` | 字段定义 `is_favorite` |
+| `js/db/words.dao.js` | CRUD：toggleFavorite, getFavoriteWords, softDeleteWord, getWordsByBooks |
+| `js/widgets/wordCard.js` | UI 收藏按钮 ⭐，删除按钮 |
+| `js/screens/favorites.js` | 收藏页面完整实现 |
+| `js/app.js` | 路由调度 `_renderPage('favorites')` |
+| `js/utils/parser.js` | 导出时包含 `is_favorite` 字段 |
+| `js/utils/sorter.js` | 6 种排序模式 |
+| `js/utils/stats.js` | 统计仪表盘显示收藏数 `favoriteCount` |
+| `js/widgets/categoryFilter.js` | 动态分类筛选组件 |
+| `index.html` | 导航按钮 `data-page="favorites"` |
+
+---
+
+## 八、Git 版本演进
+
+| 提交 | 变更 |
+|------|------|
+| `7d4b277` | 修复收藏夹导航竞态 |
+| `8a52c20` | v5 架构重写：收藏夹从实例化改为静态类 |
+| `b051fd1` | 导航菜单响应式折叠 |
+| `3f34c61` | 收藏夹分类筛选改为动态分类 |
+| `3f5b911` | 多归属标签系统 v5 + 文档同步 |

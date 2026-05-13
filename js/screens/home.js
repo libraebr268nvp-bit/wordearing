@@ -51,7 +51,7 @@ class HomePage {
         await this._renderBookFilter(container);
 
         // 分类筛选
-        CategoryFilter.render(container.querySelector('#categoryFilter'), AppState.home.category, async (category) => {
+        await CategoryFilter.render(container.querySelector('#categoryFilter'), AppState.home.category, async (category) => {
             AppState.home.category = category;
             this._resetShuffle();
             await this._renderUnits(container);

@@ -751,7 +751,7 @@ class ChallengePage {
         }
 
         // 超时当作答错 — 更新熟悉度（_updateFamiliarity 内部已处理错误记录/生命值）
-        this._updateFamiliarity(q.word, false);
+        await this._updateFamiliarity(q.word, false);
 
         this._advanceAfterDelay(container, 1200);
     }

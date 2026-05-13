@@ -27,7 +27,7 @@ class FavoritesPage {
 
         // 分类筛选
         const filterContainer = container.querySelector('#favCategoryFilter');
-        CategoryFilter.render(filterContainer, AppState.favorites.category, (category) => {
+        await CategoryFilter.render(filterContainer, AppState.favorites.category, (category) => {
             AppState.favorites.category = category;
             AppState.favorites.shuffledWords = null;
             this._renderFavList(container);

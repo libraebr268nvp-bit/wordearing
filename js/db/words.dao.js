@@ -296,4 +296,16 @@ WordDatabase.prototype.getActiveWordsCount = async function() {
     return words.length;
 };
 
-console.log('[WordWiz DAO] words.dao.js 已加载 — 20 个单词方法已挂载');
+/**
+ * 获取所有非重复分类（从所有未删除单词中提取）
+ * @returns {Promise<string[]>} 分类列表，如 ['四级', '六级', '考研', '雅思', ...]
+ */
+WordDatabase.prototype.getCategories = async function() {
+    const all = await this.getAllWords();
+    const cats = new Set();
+    all.forEach(w => { if (w.category) cats.add(w.category); });
+    const sorted = Array.from(cats).sort();
+    return sorted.length > 0 ? sorted : ['其他'];
+};
+
+console.log('[WordWiz DAO] words.dao.js 已加载 — 21 个单词方法已挂载');
