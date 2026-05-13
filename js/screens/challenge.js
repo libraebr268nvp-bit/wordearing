@@ -718,7 +718,7 @@ class ChallengePage {
     }
 
     /** 超时处理 */
-    static _handleTimeout(container) {
+    static async _handleTimeout(container) {
         const q = this._currentQuiz[this._currentIndex];
 
         if (q.type === 'choice') {
