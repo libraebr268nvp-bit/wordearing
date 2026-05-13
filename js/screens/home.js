@@ -50,6 +50,9 @@ class HomePage {
         // 词书筛选
         await this._renderBookFilter(container);
 
+        // 今日复习提示条
+        await this._renderDueBanner(container);
+
         // 分类筛选
         await CategoryFilter.render(container.querySelector('#categoryFilter'), AppState.home.category, async (category) => {
             AppState.home.category = category;
@@ -253,6 +256,36 @@ class HomePage {
                 await this._renderUnits(container);
             });
         });
+    }
+
+    static async _renderDueBanner(container) {
+        const bookFilterEl = container.querySelector('#bookFilter');
+        if (!bookFilterEl) return;
+
+        const activeBookIds = await WordDB.getActiveBookIds();
+        const dueWords = await WordDB.getDueWords(activeBookIds);
+        if (dueWords.length === 0) return;
+
+        // 移除旧的提示条（如果有）
+        const oldBanner = container.querySelector('#dueReviewBanner');
+        if (oldBanner) oldBanner.remove();
+
+        const banner = document.createElement('div');
+        banner.id = 'dueReviewBanner';
+        banner.style.cssText = 'background:#0d2818;border-left:3px solid #00ff88;padding:10px 16px;border-radius:6px;margin:0 16px 12px;display:flex;align-items:center;justify-content:space-between;';
+        banner.innerHTML = `
+            <span style="color:#aaa;font-size:13px;">📚 今日有 <strong style="color:#00ff88;">${dueWords.length}</strong> 个单词待复习</span>
+            <button class="btn btn-sm" style="background:rgba(0,255,136,0.12);color:#00ff88;border:1px solid rgba(0,255,136,0.3);padding:5px 14px;border-radius:6px;cursor:pointer;font-size:13px;">开始复习 →</button>
+        `;
+
+        banner.querySelector('button').addEventListener('click', () => {
+            if (window.AppState) {
+                AppState.reviewMode = true;
+            }
+            window.location.hash = '#/challenge';
+        });
+
+        bookFilterEl.parentNode.insertBefore(banner, bookFilterEl.nextSibling);
     }
 
     static async _renderUnits(container) {

@@ -170,7 +170,8 @@ class SettingsPage {
             try {
                 const text = await file.text();
                 const isJSON = file.name.endsWith('.json');
-                const onDuplicate = confirm('检测到重复单词时是否覆盖释义？\n\n选择「确定」= 覆盖\n选择「取消」= 跳过') ? 'overwrite' : 'skip';
+                const onDuplicate = await this._showImportConfirmModal();
+                if (!onDuplicate) return;
 
                 // 选择目标词书
                 const books = await WordDB.getBooks();
@@ -470,7 +471,7 @@ class SettingsPage {
             pc.createOffer().then(o => pc.setLocalDescription(o));
             setTimeout(() => {
                 if (el.textContent === '正在获取 IP...') {
-                    el.textContent = '请确保已通过 --bind 0.0.0.0 启动服务器';
+                    el.textContent = '获取局域网地址超时，请确认是否在局域网环境中。';
                 }
             }, 3000);
         } catch (e) {
@@ -488,6 +489,74 @@ class SettingsPage {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    }
+
+    /**
+     * 自定义模态框替代原生 confirm()，用于导入时确认覆盖策略
+     * @returns {Promise<string|false>} 'overwrite' | 'skip' | false（取消）
+     */
+    static _showImportConfirmModal() {
+        return new Promise((resolve) => {
+            // 创建遮罩层
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+            // 创建模态框
+            const modal = document.createElement('div');
+            modal.style.cssText = 'background:#1a1a2e;border:1px solid #00ff88;border-radius:12px;padding:28px 32px;max-width:400px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.5);';
+
+            // 标题
+            const title = document.createElement('p');
+            title.textContent = '📥 导入确认';
+            title.style.cssText = 'font-size:18px;font-weight:600;color:var(--text-primary);margin:0 0 12px;';
+
+            // 描述
+            const desc = document.createElement('p');
+            desc.textContent = '检测到重复单词时是否覆盖释义？';
+            desc.style.cssText = 'font-size:14px;color:var(--text-secondary);margin:0 0 20px;line-height:1.5;';
+
+            // 按钮容器
+            const btnContainer = document.createElement('div');
+            btnContainer.style.cssText = 'display:flex;gap:12px;justify-content:flex-end;';
+
+            // 确认导入按钮（覆盖）
+            const confirmBtn = document.createElement('button');
+            confirmBtn.textContent = '✅ 确认导入';
+            confirmBtn.className = 'btn btn-primary btn-sm';
+
+            // 取消按钮（跳过）
+            const skipBtn = document.createElement('button');
+            skipBtn.textContent = '⏭ 跳过重复';
+            skipBtn.className = 'btn btn-sm';
+            skipBtn.style.cssText = 'border-color:#ff6b6b;color:#ff6b6b;';
+
+            // 关闭按钮（取消导入）
+            const cancelBtn = document.createElement('button');
+            cancelBtn.textContent = '❌ 取消导入';
+            cancelBtn.className = 'btn btn-sm';
+
+            btnContainer.appendChild(confirmBtn);
+            btnContainer.appendChild(skipBtn);
+            btnContainer.appendChild(cancelBtn);
+
+            modal.appendChild(title);
+            modal.appendChild(desc);
+            modal.appendChild(btnContainer);
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+
+            // 清理函数
+            const cleanup = () => {
+                document.body.removeChild(overlay);
+            };
+
+            confirmBtn.onclick = () => { cleanup(); resolve('overwrite'); };
+            skipBtn.onclick = () => { cleanup(); resolve('skip'); };
+            cancelBtn.onclick = () => { cleanup(); resolve(false); };
+            overlay.onclick = (e) => {
+                if (e.target === overlay) { cleanup(); resolve(false); }
+            };
+        });
     }
 }
 

@@ -163,13 +163,14 @@ class AchievementHelper {
 
     /**
      * 记录一次学习动作（由 wordCard 等触发）
+     * 
+     * 注意：increaseFamiliarity() 内部已调用 recordStudyEvent()，
+     * 此处不再重复记录学习事件，仅递增成就计数并检测成就。
      */
     static async recordStudy() {
         let count = await WordDB.getSetting(this.STUDY_COUNT_KEY, 0);
         count++;
         await WordDB.saveSetting(this.STUDY_COUNT_KEY, count);
-        
-        await WordDB.recordStudyEvent('(学习动作)', '全部');
         
         await this.checkFirstStudy();
         await this.checkHundredWords();

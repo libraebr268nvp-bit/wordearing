@@ -76,13 +76,16 @@ class ChallengePage {
             // 错题集里只有 wordId / word / definition，需要从主表取完整数据
             const wordIds = wrongWords.map(w => w.wordId).filter(Boolean);
             if (wordIds.length === 0) return [];
-            allWords = [];
-            for (const id of wordIds) {
-                const w = await WordDB.getWordById(id);
-                if (w) allWords.push(w);
-            }
+            allWords = await WordDB.getWordsByIds(wordIds);
         } else if (rangeType === 'all') {
             allWords = await WordDB.getAllWords();
+        } else if (rangeType === 'due-review') {
+            const bookIds = await WordDB.getActiveBookIds();
+            allWords = await WordDB.getDueWords(bookIds);
+            if (allWords.length === 0) {
+                window.Toast.show('🎉 今日暂无待复习单词，继续保持！');
+                return [];
+            }
         } else if (rangeType === 'category' && category && category !== '全部') {
             allWords = await WordDB.getWordsByCategory(category);
         } else {
@@ -211,6 +214,7 @@ class ChallengePage {
                             <button class="challenge-opt-btn ${settings.rangeType === 'all' ? 'active' : ''}" data-value="all">全部词库</button>
                             <button class="challenge-opt-btn ${settings.rangeType === 'category' ? 'active' : ''}" data-value="category">按分类</button>
                             <button class="challenge-opt-btn ${settings.rangeType === 'wrong-words' ? 'active' : ''}" data-value="wrong-words">📝 错题集</button>
+                            <button class="challenge-opt-btn ${settings.rangeType === 'due-review' ? 'active' : ''}" data-value="due-review">📅 今日待复习</button>
                         </div>
                     </div>
 
@@ -303,7 +307,10 @@ class ChallengePage {
     // ===================== 开始游戏 =====================
 
     static async _startGame(container) {
+        // 重置防重复标记
+        this._answerSubmitted = false;
         const btnWrapper = document.getElementById('challengeStartBtnWrapper');
+
         btnWrapper.innerHTML = '<span style="color:var(--text-muted);font-size:14px;">⏳ 正在准备题目...</span>';
 
         try {
@@ -381,6 +388,7 @@ class ChallengePage {
             this._hasLivesMode = lives;
             this._hasTimedMode = timed;
             this._isFinished = false;
+            this._timeoutFired = false;
 
             this._renderQuestion(container);
 
@@ -461,6 +469,7 @@ class ChallengePage {
 
     static _renderQuestion(container) {
         if (this._isFinished) return;
+        this._timeoutFired = false;
 
         const q = this._currentQuiz[this._currentIndex];
         const total = this._currentQuiz.length;
@@ -648,7 +657,10 @@ class ChallengePage {
     // ===================== 四选一答题处理 =====================
 
     static async _handleChoiceAnswer(container, clickedBtn) {
+        if (this._answerSubmitted) return;
+        this._answerSubmitted = true;
         const selectedIndex = parseInt(clickedBtn.dataset.index);
+
         const q = this._currentQuiz[this._currentIndex];
         const isCorrect = selectedIndex === q.correctIndex;
 
@@ -680,6 +692,7 @@ class ChallengePage {
     // ===================== 拼写答题处理 =====================
 
     static async _handleSpellingAnswer(container) {
+        if (this._answerSubmitted) return;
         const input = document.getElementById('spellingInput');
         const feedback = document.getElementById('spellingFeedback');
         const q = this._currentQuiz[this._currentIndex];
@@ -690,6 +703,8 @@ class ChallengePage {
             feedback.style.color = 'var(--accent-yellow)';
             return;
         }
+        this._answerSubmitted = true;
+
 
         // 忽略大小写比较（英文拼写）
         const isCorrect = q.mode === 'spelling-cn'
@@ -720,7 +735,10 @@ class ChallengePage {
     }
 
     static async _handleSpellingSkip(container) {
+        if (this._answerSubmitted) return;
+        this._answerSubmitted = true;
         const input = document.getElementById('spellingInput');
+
         const feedback = document.getElementById('spellingFeedback');
         const q = this._currentQuiz[this._currentIndex];
 
@@ -740,6 +758,10 @@ class ChallengePage {
 
     /** 超时处理 */
     static async _handleTimeout(container) {
+        if (this._answerSubmitted) return;
+        this._answerSubmitted = true;
+        this._timeoutFired = true;
+
         const q = this._currentQuiz[this._currentIndex];
 
         if (q.type === 'choice') {
@@ -785,6 +807,8 @@ class ChallengePage {
                 await WordDB.updateWord(word.id, {
                     familiarity: Math.min(5, (word.familiarity || 0) + 1)
                 });
+                // 记录学习事件到 stats 表（使学习趋势图/热力图能反映挑战数据）
+                await WordDB.recordStudyEvent(word.word, word.category || '挑战');
                 this._correctCount++;
                 this._streakCount++;
                 if (this._streakCount > this._maxStreak) this._maxStreak = this._streakCount;
@@ -794,7 +818,7 @@ class ChallengePage {
                 });
                 this._wrongIndices.push(this._currentIndex);
                 this._streakCount = 0;
-                if (this._hasLivesMode) this._lives--;
+                if (this._hasLivesMode && !this._timeoutFired) this._lives--;
             }
         } catch (e) {
             console.warn('[Challenge] 更新熟悉度失败:', e);
@@ -864,7 +888,17 @@ class ChallengePage {
         }
 
         // 记录冷却词
-        const wordIds = this._currentQuiz.map(q => q.word.id);
+        // 生命值模式下只记录实际答过的题目，避免未答的题也被锁 7 天
+        let wordIds;
+        if (this._hasLivesMode && this._lives <= 0) {
+            // 命数耗尽：只记录已答过的题（_wrongIndices 包含答错的索引）
+            wordIds = [];
+            for (let i = 0; i <= this._currentIndex; i++) {
+                wordIds.push(this._currentQuiz[i].word.id);
+            }
+        } else {
+            wordIds = this._currentQuiz.map(q => q.word.id);
+        }
         await this._recordRecentWords(wordIds);
 
         // 记录挑战历史

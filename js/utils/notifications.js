@@ -63,7 +63,7 @@ class NotificationHelper {
             try {
                 const notif = new Notification(title, {
                     body: message,
-                    icon: '/favicon.ico'
+                    icon: null
                 });
                 // 点击通知跳转到首页
                 notif.onclick = () => {

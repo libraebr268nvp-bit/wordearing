@@ -21,24 +21,27 @@ d:\gxj\code\wordlearing/
 │   ├── app.js                 # ★ 主入口：初始化DB + 路由 + 全局状态 + Toast
 │   │
 │   ├── db/                    # ★ 数据库层（6 文件，prototype 挂载）
-│   │   ├── connection.js      #   基类 + 建表 + 工具方法 + 初始化 + 预置数据
+│   │   ├── connection.js      #   基类 + 建表（含 due_date 索引 v5）+ 工具方法 + 初始化 + 预置数据
 │   │   ├── settings.dao.js    #   设置 DAO
 │   │   ├── stats.dao.js       #   统计 DAO
 │   │   ├── books.dao.js       #   词书 DAO（CRUD + 激活管理）
-│   │   ├── words.dao.js       #   单词 DAO（CRUD + 查询 + 搜索 + 动态分类）
+│   │   ├── words.dao.js       #   单词 DAO（CRUD + 查询 + 搜索 + 间隔复习）
 │   │   └── index.js           #   创建 window.WordDB 单例
 │   │
+│   ├── lib/
+│   │   └── chart.umd.min.js   # Chart.js（学习趋势折线图）
+│   │
 │   ├── models/
-│   │   └── word.js            # 数据模型：WordModel.create/fromRow + 多归属 book_ids
+│   │   └── word.js            # 数据模型：WordModel.create/fromRow + 多归属 book_ids + due_date
 │   │
 │   ├── screens/
-│   │   ├── home.js            # 首页：学习页（搜索+词书过滤+分类+单元展示+全局混序）
+│   │   ├── home.js            # 首页：学习页（搜索+词书过滤+分类+单元展示+全局混序+今日复习提示条）
 │   │   ├── home/
 │   │   │   └── shuffle.js     # 首页排序工具（HomeShuffle，6 种排序模式）
 │   │   ├── favorites.js       # 收藏夹：独立展示收藏单词（排序+混序+分类+导出）
 │   │   ├── trash.js           # 回收站：软删除/恢复/永久删除
 │   │   ├── settings.js        # 设置：统计/词书管理/导入导出/提醒/局域网
-│   │   ├── challenge.js       # 挑战模式：3 种答题模式 + 生命值 + 限时 + 难度筛选
+│   │   ├── challenge.js       # 挑战模式：3 种答题模式 + 生命值 + 限时 + 难度筛选 + 今日待复习范围
 │   │   └── wrongwords.js      # 错题集：挑战错词收集 + 分类筛选 + 导出
 │   │
 │   ├── widgets/
@@ -51,7 +54,7 @@ d:\gxj\code\wordlearing/
 │       ├── sorter.js          # 通用排序模块（WordSorter，6 种排序模式）
 │       ├── achievements.js    # 成就系统（AchievementHelper，10 个成就）
 │       ├── notifications.js   # 桌面通知提醒（Web Notification + Toast + 提示音）
-│       └── stats.js           # 统计图表（Chart.js）
+│       └── stats.js           # 统计图表（Chart.js）+ 热力图渲染
 │
 ├── assets/
 │   ├── words_cet4.json        # 四级词库
@@ -90,6 +93,7 @@ d:\gxj\code\wordlearing/
 | **IndexedDB** | 本地数据库（浏览器持久存储，4 个对象仓库） |
 | **Hash 路由** (`#/home`) | 6 个页面切换，无需后端 |
 | **Chart.js** | 学习趋势折线图（内置于 `js/lib/`） |
+| **自实现热力图** | 学习打卡日历（`js/utils/stats.js` 内自实现，GitHub 贡献图风格） |
 | **Web Notifications API** | 每日复习桌面通知 |
 | **Web Audio API** | 提醒提示音 |
 | **WebRTC** | 获取局域网 IP（设置页展示） |
@@ -138,19 +142,19 @@ d:\gxj\code\wordlearing/
 浏览器前进/后退 → hashchange 事件
     └─→ _handleRoute(hash)
          └─→ if (page 变了) _renderPage(page)
-               └─→ generation++ (防异步竞态)
+               └─→ _renderGen++ (防异步竞态)
                     └─→ await Page.render(container)
-                          └─→ 如果是过时的 generation → 丢弃结果
+                          └─→ 如果是过时的 _renderGen → 丢弃结果
 ```
 
-### generation 锁防异步竞态
+### _renderGen 锁防异步竞态
 
 ```javascript
-this.generation = 0;
+this._renderGen = 0;
 _renderPage(page) {
-    const gen = ++this.generation;
+    const gen = ++this._renderGen;
     // ... await 异步操作 ...
-    if (gen !== this.generation) return; // 过时，丢弃
+    if (gen !== this._renderGen) return; // 过时，丢弃
 }
 ```
 
@@ -177,7 +181,7 @@ window.AppState = {
 
 | 对象仓库 | keyPath | 索引 | 说明 |
 |---------|---------|------|------|
-| `words` | `id` (autoIncrement) | `word`, `category`, `unit`, `book_id`, `is_favorite`, `deleted_at`, `familiarity` | 单词主表 |
+| `words` | `id` (autoIncrement) | `word`, `category`, `unit`, `book_id`, `book_ids`, `is_favorite`, `deleted_at`, `familiarity`, `due_date` | 单词主表 |
 | `books` | `id` (autoIncrement) | `name` | 词书表 |
 | `settings` | `key` | — | 键值对设置 |
 | `stats` | `id` (autoIncrement) | `date`, `type` | 学习统计 |
@@ -192,8 +196,9 @@ window.AppState = {
 | `category` | string | '四级' | 分类 |
 | `unit` | number | 1 | 所属单元（每单元约 100 词） |
 | `book_id` | number | 1 | 主归属词书 ID（兼容旧版） |
-| **`book_ids`** | **number[]** | **[book_id]** | **多归属词书 ID 数组（v5 新增，单词可同时属于多本词书）** |
+| **`book_ids`** | **number[]** | **[book_id]** | **多归属词书 ID 数组（v5 新增）** |
 | `familiarity` | number | 0 | 熟悉度 0~5 |
+| **`due_date`** | **string\|null** | **null** | **下次复习日期（v5.2 新增，间隔复习用）** |
 | `is_favorite` | boolean | false | 是否收藏 |
 | `book_source` | string | '内置词库' | 来源词书名称 |
 | `deleted_at` | string\|null | null | 软删除时间（回收站用） |
@@ -221,7 +226,7 @@ window.AppState = {
 | `window.AchievementHelper` | 类 | 成就系统（10 个成就） |
 | `window.WordParser` | 类 | 导入导出工具（CSV/JSON） |
 | `window.NotificationHelper` | 类 | 桌面通知工具（Web Notification + Toast + 提示音） |
-| `window.StatsHelper` | 类 | 统计图表工具（Chart.js） |
+| `window.StatsHelper` | 类 | 统计图表工具（Chart.js + 热力图） |
 | `window.Toast` | 对象 | Toast 通知 `{ show(msg, type) }` |
 | `window.AppState` | 对象 | 全局 UI 状态 |
 
@@ -234,13 +239,14 @@ window.AppState = {
 | 功能 | 文件 | 说明 |
 |------|------|------|
 | 词书筛选 | `home.js` | 多选式词书按钮，只显示勾选词书的单词（基于 book_ids 多归属） |
+| **今日复习提示条** | `home.js` | **顶部提示今日到期单词数 + 直达挑战按钮** |
 | 分类筛选 | `categoryFilter.js` | 从数据库动态提取，不硬编码 |
 | 模糊搜索 | `home.js` | 300ms 防抖，匹配单词和释义，点击定位到单元 |
 | 单元展开/折叠 | `unitCard.js` | 点击单元标题展开/收起 |
 | 单元混序 | `unitCard.js` | 点击 🔀 打乱当前单元单词顺序 |
 | 全局混序 | `home.js` + `shuffle.js` | 🔀 按钮打乱所有单元，跨页面保持 |
 | 6 种排序模式 | `sorter.js` | 默认/熟悉度↑/熟悉度↓/A→Z/Z→A/随机混序 |
-| 熟悉度系统 | `wordCard.js` | 0~5 级，点击 ✓ 增加，圆点显示进度 |
+| 熟悉度系统 | `wordCard.js` | 0~5 级，点击 ✓ 增加（同时更新 due_date），圆点显示进度 |
 | 收藏/取消收藏 | `wordCard.js` | ⭐ 按钮即点即切 |
 | 软删除 | `wordCard.js` | ✕ 按钮移入回收站 |
 
@@ -273,6 +279,7 @@ window.AppState = {
 | 生命值模式 | `challenge.js` | 3 条命，答错扣 1 |
 | 限时模式 | `challenge.js` | 每题 10 秒超时 |
 | 错题集专项 | `challenge.js` | rangeType: 'wrong-words' |
+| **今日待复习** | `challenge.js` | **rangeType: 'due-review'，只从到期单词出题** |
 | 熟悉度联动 | `challenge.js` | 答对+1（上限5），答错-1（下限0），超时自动减 |
 | 错题收集 | `challenge.js` + `result.js` | 自动写入 wrong_words 设置（最多 200 条） |
 | 冷却机制 | `challenge.js` | 7 天已挑战单词不重复 |
@@ -293,7 +300,7 @@ window.AppState = {
 
 | 功能 | 文件 | 说明 |
 |------|------|------|
-| 统计仪表盘 | `stats.js` | 总数/已学/收藏数 + 7 天趋势折线图 |
+| 统计仪表盘 | `stats.js` | 总数/已学/收藏数 + 7 天趋势折线图 + 学习热力图 |
 | 词书管理 | `settings.js` | 新增/删除/勾选激活词书 |
 | 导入 | `settings.js` + `parser.js` | CSV/JSON 导入，自动创建词书（v5 多归属支持） |
 | 导出 | `settings.js` + `parser.js` | 导出为 JSON/CSV |
@@ -313,14 +320,14 @@ window.AppState = {
  4. settings.dao.js            (设置 DAO)
  5. stats.dao.js               (统计 DAO)
  6. books.dao.js               (词书 DAO)
- 7. words.dao.js               (单词 DAO：CRUD + 查询 + 搜索 + 多归属 + 动态分类)
+ 7. words.dao.js               (单词 DAO：CRUD + 查询 + 搜索 + 多归属 + 间隔复习)
  8. db/index.js                (WordDB 单例)
 
  9. utils/parser.js            (导入导出)
 10. utils/notifications.js     (通知)
-11. utils/stats.js             (统计图表)
-12. utils/sorter.js            (通用排序模块)
-13. utils/achievements.js      (成就系统)
+11. utils/stats.js             (统计图表 + 热力图)
+12. utils/achievements.js      (成就系统)
+13. utils/sorter.js            (通用排序模块)
 14. widgets/categoryFilter.js  (动态分类筛选)
 15. widgets/wordCard.js        (单词卡片)
 16. widgets/unitCard.js        (单元卡片)
@@ -360,7 +367,8 @@ window.AppState = {
 ## 十、Git 版本记录
 
 ```
-(HEAD)   fix: 文档同步 — 更新 5 份文档反映代码变更
+(HEAD)   docs: 阶段四 — 6 文档同步（间隔复习/热力图/docs差异修复）
+eb816bd feat: 学习热力图 + 间隔复习（due_date/复习提示条/今日待复习范围）
 dbf6799 fix: 搜索定位/错题集修复/索引容错/时区修复等 19 项改进
 3f5b911 feat: 多归属标签系统 v5 - 单词可同时属于多本词书
 c534235 (origin/main) docs: 后续改进方案构思 (v2.0)
@@ -372,7 +380,6 @@ b051fd1 feat: 导航菜单响应式折叠+高亮+淡入淡出动画
 70bce09 挑战模式增强 + 成就系统扩展 + 错题集页面
 8a52c20 v5 架构重写：路由+混序+收藏夹+单元卡片
 7d4b277 fix: 收藏夹导航竞态 + _addBatch 主键冲突 + 全局混序
-
 ```
 
 ---

@@ -13,7 +13,7 @@
 class WordDatabase {
     constructor() {
         this.dbName = 'WordWizDB';
-        this.dbVersion = 4;
+        this.dbVersion = 5;
         this.db = null;
     }
 
@@ -89,6 +89,20 @@ class WordDatabase {
                     }
                 }
 
+                // v5 新增 due_date 索引（间隔复习）
+                if (oldVersion < 5) {
+                    if (db.objectStoreNames.contains('words')) {
+                        try {
+                            const store = transaction.objectStore('words');
+                            if (!store.indexNames.contains('due_date')) {
+                                store.createIndex('due_date', 'due_date', { unique: false });
+                            }
+                        } catch (e) {
+                            console.warn('📦 v5 升级：创建 due_date 索引跳过:', e.message);
+                        }
+                    }
+                }
+
                 console.log('📦 数据库升级到 v' + this.dbVersion);
             };
 
@@ -117,6 +131,7 @@ class WordDatabase {
         store.createIndex('is_favorite', 'is_favorite', { unique: false });
         store.createIndex('deleted_at', 'deleted_at', { unique: false });
         store.createIndex('familiarity', 'familiarity', { unique: false });
+        store.createIndex('due_date', 'due_date', { unique: false });
     }
 
     _createSettingsStore(db) {
@@ -154,31 +169,36 @@ class WordDatabase {
     async _getAllRaw(storeName, filterFn = null) {
         const store = await this._getStore(storeName, 'readonly');
         return new Promise((resolve, reject) => {
-            const req = store.getAll();
-            req.onsuccess = () => {
-                let results = req.result || [];
-                if (filterFn) results = results.filter(filterFn);
-                resolve(results);
-            };
-            req.onerror = () => {
-                console.warn('getAllRaw 查询失败，尝试全表扫描:', req.error);
-                const cursorReq = store.openCursor();
-                const results = [];
-                cursorReq.onsuccess = (e) => {
-                    const cursor = e.target.result;
-                    if (cursor) {
-                        results.push(cursor.value);
-                        cursor.continue();
-                    } else {
-                        if (filterFn) {
-                            resolve(results.filter(filterFn));
-                        } else {
-                            resolve(results);
-                        }
-                    }
+            try {
+                const req = store.getAll();
+                req.onsuccess = () => {
+                    let results = req.result || [];
+                    if (filterFn) results = results.filter(filterFn);
+                    resolve(results);
                 };
-                cursorReq.onerror = () => reject(cursorReq.error);
-            };
+                req.onerror = () => {
+                    console.warn('getAllRaw 查询失败，尝试全表扫描:', req.error);
+                    const cursorReq = store.openCursor();
+                    const results = [];
+                    cursorReq.onsuccess = (e) => {
+                        const cursor = e.target.result;
+                        if (cursor) {
+                            results.push(cursor.value);
+                            cursor.continue();
+                        } else {
+                            if (filterFn) {
+                                resolve(results.filter(filterFn));
+                            } else {
+                                resolve(results);
+                            }
+                        }
+                    };
+                    cursorReq.onerror = (event) => reject(event.target.error);
+                };
+            } catch (e) {
+                console.warn('getAllRaw 异常，返回空数组:', e);
+                resolve([]);
+            }
         });
     }
 

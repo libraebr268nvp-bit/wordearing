@@ -42,11 +42,10 @@ WordDatabase.prototype.toggleFavorite = async function(id) {
     return this.updateWord(id, { is_favorite: !word.is_favorite });
 };
 
-// softDeleteWord(id) — 软删除时自动取消收藏
+// softDeleteWord(id) — 软删除，保留收藏状态（回收站还原后可恢复）
 WordDatabase.prototype.softDeleteWord = async function(id) {
     return this.updateWord(id, { 
-        deleted_at: new Date().toISOString(),
-        is_favorite: false    // ← 删除时强制取消收藏
+        deleted_at: new Date().toISOString()
     });
 };
 
@@ -113,7 +112,7 @@ favBtn.addEventListener('click', async (e) => {
 ### 删除按钮联动
 
 ```javascript
-// 删除时自动调用 softDeleteWord（内部设 is_favorite = false）
+// 删除时自动调用 softDeleteWord（保留收藏状态，回收站还原后可恢复）
 delBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
     if (confirm(`确定要将 "${word.word}" 移入回收站？`)) {
@@ -207,7 +206,7 @@ case 'favorites':
 
 用户删除单词 (wordCard.js delBtn)
     → WordDB.softDeleteWord(id)  (words.dao.js)
-        → updateWord(id, { deleted_at: ..., is_favorite: false })
+        → updateWord(id, { deleted_at: ... })  （保留收藏状态）
     → options.onUpdate() → 刷新收藏夹
 ```
 

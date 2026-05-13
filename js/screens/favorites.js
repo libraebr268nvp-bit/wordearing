@@ -183,10 +183,10 @@ class FavoritesPage {
 
             listContainer.innerHTML = '';
             const wrapper = document.createElement('div');
-            wrapper.className = 'unit-card';
+            wrapper.className = 'fav-card';
             
             const header = document.createElement('div');
-            header.className = 'unit-header';
+            header.className = 'fav-header';
             header.innerHTML = '<div class="unit-title">⭐ 收藏的单词 <span class="unit-count">· ' + sorted.length + ' 词</span></div>';
             wrapper.appendChild(header);
 

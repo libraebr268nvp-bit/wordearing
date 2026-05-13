@@ -696,6 +696,28 @@ body::before {
     gap: 6px;
 }
 
+/* ====== 收藏夹卡片（替代 unit-card 样式） ====== */
+.fav-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    margin: 0 16px 16px;
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+    transition: var(--transition);
+}
+.fav-card:hover {
+    border-color: rgba(108, 140, 255, 0.2);
+}
+.fav-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-color);
+    user-select: none;
+}
+
 /* ====== 空状态 ====== */
 .empty-state {
     text-align: center;

@@ -8,7 +8,8 @@
 - **语言：** 纯 HTML + CSS + JavaScript（ES6+）
 - **存储：** IndexedDB（4 个对象仓库：words / books / settings / stats）
 - **路由：** Hash 路由（`#/home`、`#/favorites`、`#/trash`、`#/settings`、`#/challenge`、`#/wrong-words`）
-- **图表：** Chart.js（内置 `js/lib/chart.umd.min.js`）
+- **图表：** Chart.js（内置 `js/lib/chart.umd.min.js`，学习趋势折线图）
+- **热力图：** 自实现（`js/utils/stats.js` 内，GitHub 风格打卡日历）
 - **通知：** Web Notifications API
 - **启动：** `npx http-server -p 3000 -c-1` 提供 HTTP 服务
 
@@ -22,18 +23,29 @@
 | `#/challenge` | 挑战模式 | `ChallengePage` |
 | `#/wrong-words` | 错题集 | `WrongWordsPage` |
 
-## 挑战模式（challenge.js）增强 — commit 5ccc39c
+## 挑战模式（challenge.js）增强 — commit 5ccc39c + v5.2
 - **3 种答题模式：** 四选一 / 汉→英拼写（首字母提示） / 英→汉拼写
 - **难度筛选：** 简单（熟悉度≥3）/ 普通（全部）/ 困难（熟悉度≤2）
 - **生命值模式：** 3 条命，答错扣 1
 - **限时模式：** 每题 10 秒超时
 - **错题集专项练习：** `rangeType: 'wrong-words'`
+- **今日待复习专项练习：** `rangeType: 'due-review'`（v5.2 新增，只从到期单词出题）
 - **设置持久化：** settings 表存储 mode/difficulty/lives/timed
 
 ## 导出功能（parser.js / favorites.js / wrongwords.js）
 - **parser.js：** `exportFavoritesToJSON(category)` / `exportFavoritesToCSV(category)` / `exportWrongWordsToJSON()` / `exportWrongWordsToCSV()`
 - **favorites.js：** 右上角「📤 导出」按钮 → 下拉菜单（JSON / CSV）
 - **wrongwords.js：** 右上角「📤 导出」按钮 → 下拉菜单（JSON / CSV）+ 「🗑️ 清空错题」按钮
+
+## 间隔复习机制（v5.2 新增）
+- 单词点击 ✓ 按钮增加熟悉度时，自动基于熟悉度计算 **due_date**（下次复习日期）
+- 间隔算法：熟悉度 0→1 次日、1→2 隔 2 天、2→3 隔 4 天、3→4 隔 7 天、4→5 隔 15 天、5→掌握隔 30 天
+- 首页顶部 **今日复习提示条** 显示到期单词数，可直达挑战
+- 挑战模式新增 **"📅 今日待复习"** 出题范围，仅从 `due_date ≤ 当天` 的单词中抽题
+
+## 学习热力图（v5.2 新增）
+- 设置页展示 GitHub 风格的学习热力图（基于 stats 表数据）
+- 使用自实现渲染（`js/utils/stats.js` 内），显示过去 1 年的每日学习记录
 
 ## 数据流概要
 ```
@@ -46,6 +58,8 @@
 
 | 文件 | 内容 | 标签 |
 |------|------|------|
+| `assets/words_cet4.json` | 四级词汇 | cet4 |
+| `assets/words_cet6.json` | 六级词汇 | cet6 |
 | `assets/words_ky.json` | 考研词汇 | ky |
 | `assets/words_toefl.json` | 托福词汇 | toefl |
 | `assets/words_ielts.json` | 雅思词汇 | ielts |

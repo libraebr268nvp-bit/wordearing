@@ -35,7 +35,7 @@ class WordModel {
      */
     static create({ id, word, definition, category = '四级', unit = 1, book_id = 1,
                      book_ids, familiarity = 0, is_favorite = false, book_source = '内置词库',
-                     deleted_at = null, created_at = null } = {}) {
+                     deleted_at = null, created_at = null, due_date = null } = {}) {
         const record = {
             word: word || '',
             definition: definition || '',
@@ -48,7 +48,8 @@ class WordModel {
             is_favorite: !!is_favorite,
             book_source: book_source || '内置词库',
             deleted_at: deleted_at || null,
-            created_at: created_at || new Date().toISOString()
+            created_at: created_at || new Date().toISOString(),
+            due_date: due_date || null
         };
         if (id !== undefined) {
             record.id = id;
@@ -132,7 +133,8 @@ class WordModel {
                 is_favorite: row.is_favorite === 1 || row.is_favorite === true,
                 book_source: row.book_source || '内置词库',
                 deleted_at: row.deleted_at || null,
-                created_at: row.created_at || new Date().toISOString()
+                created_at: row.created_at || new Date().toISOString(),
+                due_date: row.due_date || null
             });
         } catch (e) {
             console.warn('WordModel.fromRow 转换失败:', e, row);

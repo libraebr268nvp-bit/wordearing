@@ -113,11 +113,55 @@ WordDatabase.prototype.increaseFamiliarity = async function(id) {
     if (!word) return null;
     if ((word.familiarity || 0) >= 5) return null; // 已满
     const newFam = Math.min(5, (word.familiarity || 0) + 1);
-    const updated = await this.updateWord(id, { familiarity: newFam });
+
+    // 计算下次复习日期
+    const dueDateStr = this._calcDueDateStr(newFam);
+
+    const updated = await this.updateWord(id, { familiarity: newFam, due_date: dueDateStr });
     if (updated) {
         await this.recordStudyEvent(word.word, word.category);
     }
     return updated;
+};
+
+/**
+ * 根据熟悉度计算下次复习日期（YYYY-MM-DD）
+ * @param {number} familiarity 0-5
+ * @returns {string} YYYY-MM-DD
+ */
+WordDatabase.prototype._calcDueDateStr = function(familiarity) {
+    const intervals = [1, 2, 4, 7, 15, 30];
+    const days = intervals[Math.min(familiarity, 5)];
+    const due = new Date();
+    due.setDate(due.getDate() + days);
+    return due.toISOString().split('T')[0];
+};
+
+/**
+ * 更新单词的 due_date（根据当前熟悉度）
+ * @param {number} id
+ * @param {number} familiarity 当前熟悉度 0-5
+ * @returns {Promise<WordModel|null>}
+ */
+WordDatabase.prototype.updateDueDate = async function(id, familiarity) {
+    const dueDateStr = this._calcDueDateStr(familiarity);
+    return this.updateWord(id, { due_date: dueDateStr });
+};
+
+/**
+ * 获取已到期的待复习单词（due_date <= 今天 且未删除）
+ * @param {number[]} bookIds - 词书 ID 列表，为空则不过滤
+ * @returns {Promise<WordModel[]>}
+ */
+WordDatabase.prototype.getDueWords = async function(bookIds) {
+    const today = new Date().toISOString().split('T')[0];
+    const results = await this._getAllRaw('words', row =>
+        this._isNotDeleted(row) &&
+        row.due_date !== null &&
+        row.due_date <= today &&
+        (bookIds.length === 0 || WordModel.belongsToBook(row, bookIds))
+    );
+    return results.map(r => WordModel.fromRow(r)).filter(r => r !== null);
 };
 
 /**
@@ -239,6 +283,20 @@ WordDatabase.prototype.getFavoriteWords = async function(category = null, bookId
         words = words.filter(w => w.category === category);
     }
     return words;
+};
+
+/**
+ * 批量根据 ID 数组获取单词（用一次全表扫描替代串行循环）
+ * @param {number[]} ids
+ * @returns {Promise<WordModel[]>}
+ */
+WordDatabase.prototype.getWordsByIds = async function(ids) {
+    if (!ids || ids.length === 0) return [];
+    const idSet = new Set(ids);
+    const results = await this._getAllRaw('words', row =>
+        this._isNotDeleted(row) && idSet.has(row.id)
+    );
+    return results.map(r => WordModel.fromRow(r)).filter(r => r !== null);
 };
 
 /**
