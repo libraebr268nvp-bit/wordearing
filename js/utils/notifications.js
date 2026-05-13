@@ -132,6 +132,14 @@ class NotificationHelper {
      * 检查并触发每日提醒
      * 由 app.js 和设置页定时调用
      */
+    static _getLocalDateStr() {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+
     static async checkDailyReminder() {
         try {
             const enabled = await WordDB.getSetting('reminder_enabled', false);
@@ -139,7 +147,7 @@ class NotificationHelper {
 
             const reminderTime = await WordDB.getSetting('reminder_time', '20:00');
             const lastSentDate = await WordDB.getSetting('reminder_last_sent', '');
-            const today = new Date().toISOString().split('T')[0];
+            const today = this._getLocalDateStr();
 
             // 今天已经发过了就不重复发
             if (lastSentDate === today) {
@@ -187,7 +195,7 @@ class NotificationHelper {
         const enabled = await WordDB.getSetting('reminder_enabled', false);
         const reminderTime = await WordDB.getSetting('reminder_time', '20:00');
         const lastSent = await WordDB.getSetting('reminder_last_sent', '');
-        const today = new Date().toISOString().split('T')[0];
+        const today = this._getLocalDateStr();
         const permission = this.getPermissionStatus();
 
         return {

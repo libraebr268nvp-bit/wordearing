@@ -49,9 +49,13 @@ class WordDatabase {
                 if (oldVersion < 3) {
                     this._createBookStore(db);
                     if (db.objectStoreNames.contains('words')) {
-                        const store = transaction.objectStore('words');
-                        if (!store.indexNames.contains('book_id')) {
-                            store.createIndex('book_id', 'book_id', { unique: false });
+                        try {
+                            const store = transaction.objectStore('words');
+                            if (!store.indexNames.contains('book_id')) {
+                                store.createIndex('book_id', 'book_id', { unique: false });
+                            }
+                        } catch (e) {
+                            console.warn('📦 v3 升级：创建 book_id 索引跳过:', e.message);
                         }
                     }
                 }
@@ -59,22 +63,29 @@ class WordDatabase {
                 // v4 新增 book_ids 多归属字段 + 迁移旧数据
                 if (oldVersion < 4) {
                     if (db.objectStoreNames.contains('words')) {
-                        const store = transaction.objectStore('words');
-                        if (!store.indexNames.contains('book_ids')) {
-                            store.createIndex('book_ids', 'book_ids', { unique: false });
-                        }
-                        // 为已有数据补上 book_ids 字段（兼容旧数据迁移）
-                        store.openCursor().onsuccess = (e) => {
-                            const cursor = e.target.result;
-                            if (cursor) {
-                                const data = cursor.value;
-                                if (!data.book_ids || data.book_ids.length === 0) {
-                                    data.book_ids = [data.book_id || 1];
-                                    cursor.update(data);
-                                }
-                                cursor.continue();
+                        let store;
+                        try {
+                            store = transaction.objectStore('words');
+                            if (!store.indexNames.contains('book_ids')) {
+                                store.createIndex('book_ids', 'book_ids', { unique: false });
                             }
-                        };
+                        } catch (e) {
+                            console.warn('📦 v4 升级：创建 book_ids 索引跳过:', e.message);
+                        }
+                        if (store) {
+                            // 为已有数据补上 book_ids 字段（兼容旧数据迁移）
+                            store.openCursor().onsuccess = (e) => {
+                                const cursor = e.target.result;
+                                if (cursor) {
+                                    const data = cursor.value;
+                                    if (!data.book_ids || data.book_ids.length === 0) {
+                                        data.book_ids = [data.book_id || 1];
+                                        cursor.update(data);
+                                    }
+                                    cursor.continue();
+                                }
+                            };
+                        }
                     }
                 }
 
@@ -197,9 +208,9 @@ class WordDatabase {
     async _addBatch(storeName, dataArray) {
         if (!dataArray || dataArray.length === 0) return 0;
         const store = await this._getStore(storeName, 'readwrite');
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             let completed = 0;
-            let hasError = false;
+            let errors = 0;
             for (const data of dataArray) {
                 try {
                     const cleanData = { ...data };
@@ -207,19 +218,17 @@ class WordDatabase {
                     const req = store.add(cleanData);
                     req.onsuccess = () => {
                         completed++;
-                        if (completed >= dataArray.length && !hasError) resolve(completed);
+                        if (completed + errors >= dataArray.length) resolve(completed);
                     };
                     req.onerror = () => {
-                        if (!hasError) {
-                            hasError = true;
-                            reject(new Error(`批量写入失败: ${req.error?.message || '未知错误'}`));
-                        }
+                        errors++;
+                        console.warn('批量写入跳过一条:', req.error?.message || '未知错误');
+                        if (completed + errors >= dataArray.length) resolve(completed);
                     };
                 } catch (e) {
-                    if (!hasError) {
-                        hasError = true;
-                        reject(e);
-                    }
+                    errors++;
+                    console.warn('批量写入跳过一条:', e.message);
+                    if (completed + errors >= dataArray.length) resolve(completed);
                 }
             }
         });

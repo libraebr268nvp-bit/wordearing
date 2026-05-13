@@ -7,6 +7,17 @@
  */
 
 /**
+ * 获取本地日期字符串（YYYY-MM-DD），避免 UTC 时区偏差
+ */
+function _getLocalDateStr(date) {
+    const d = date || new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+/**
  * 获取统计数据
  * @returns {Promise<{totalWords: number, averageFamiliarity: string, favoriteCount: number, trashCount: number}>}
  */
@@ -48,7 +59,7 @@ WordDatabase.prototype.getBookWordCounts = async function() {
  * @returns {Promise<number>} 记录 ID
  */
 WordDatabase.prototype.recordStudyEvent = async function(word, category) {
-    const today = new Date().toISOString().split('T')[0];
+    const today = _getLocalDateStr();
     return this._add('stats', {
         date: today,
         word: word,
@@ -74,7 +85,7 @@ WordDatabase.prototype.getStudyTrend = async function(days = 7) {
             for (let i = days - 1; i >= 0; i--) {
                 const d = new Date(now);
                 d.setDate(d.getDate() - i);
-                const dateStr = d.toISOString().split('T')[0];
+                const dateStr = _getLocalDateStr(d);
                 const count = records.filter(r => r.date === dateStr && r.type === 'familiar').length;
                 result.push({ date: dateStr, count });
             }
@@ -85,3 +96,4 @@ WordDatabase.prototype.getStudyTrend = async function(days = 7) {
 };
 
 console.log('[WordWiz DAO] stats.dao.js 已加载 — 4 个统计方法已挂载');
+

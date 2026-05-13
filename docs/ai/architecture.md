@@ -4,7 +4,8 @@
 
 ```
 d:\gxj\code\wordlearing/
-├── index.html                          # 唯一 HTML，按序加载 16 个 JS
+├── index.html                          # 唯一 HTML，按序加载 24 个 JS
+
 ├── start.bat                           # 启动脚本：npx http-server -p 3000 -c-1
 ├── server.py                           # Python 版开发服务器（备选）
 ├── download_words.py                   # Python 脚本：从 ECDICT 下载并转换词库为 JSON
@@ -62,10 +63,9 @@ d:\gxj\code\wordlearing/
 │   └── words_zk.json                   # 中考词库（split_csv.js 生成）
 │
 ├── scripts/
-│   ├── split_csv.js                    # 从 ecdict.csv 按 tag 拆分多词书
-│   ├── split_csv.py                    # Python 版（实验性）
-│   ├── check_tags.js                   # 检查 ecdict.csv 中各 tag 分布
-│   └── test_csv.py                     # CSV 测试脚本
+│   ├── generate_manual.js              # 生成 WordWiz 使用手册 DOCX
+│   └── split_csv.js                    # 从 ecdict.csv 按 tag 拆分多词书
+
 │
 └── docs/
     ├── project_overview.md             # 项目总文档
@@ -105,9 +105,11 @@ d:\gxj\code\wordlearing/
 | `addWord(wordData)` | `async addWord(wordData: object): Promise<number>` | 添加单词，返回新 ID |
 | `addWords(wordsArray)` | `async addWords(wordsArray: object[]): Promise<number>` | 批量添加 |
 | `updateWord(id, updates)` | `async updateWord(id: number, updates: object): Promise<WordModel\|null>` | 更新单词字段 |
-| `increaseFamiliarity(id)` | `async increaseFamiliarity(id: number): Promise<WordModel\|null>` | 熟悉度 +1（上限 5） |
+| `increaseFamiliarity(id)` | `async increaseFamiliarity(id: number): Promise<WordModel\|null>` | 熟悉度 +1（上限 5，已满返回 null） |
+
 | `toggleFavorite(id)` | `async toggleFavorite(id: number): Promise<WordModel\|null>` | 切换收藏状态 |
-| `softDeleteWord(id)` | `async softDeleteWord(id: number): Promise<WordModel\|null>` | 软删除（设 deleted_at + is_favorite=false） |
+| `softDeleteWord(id)` | `async softDeleteWord(id: number): Promise<WordModel\|null>` | 软删除（设 deleted_at，保留收藏状态） |
+
 | `restoreWord(id)` | `async restoreWord(id: number): Promise<WordModel\|null>` | 恢复（设 deleted_at=null） |
 | `hardDeleteWord(id)` | `async hardDeleteWord(id: number): Promise<boolean>` | 物理删除 |
 | `clearTrash()` | `async clearTrash(): Promise<number>` | 清空回收站 |
@@ -244,8 +246,10 @@ d:\gxj\code\wordlearing/
 | `definition` | string | — | 中文释义 |
 | `category` | string | '四级' | 分类 |
 | `unit` | number | 1 | 所属单元（约 100 词/单元） |
-| `book_id` | number | 1 | 所属词书 ID |
+| `book_id` | number | 1 | 主归属词书 ID（兼容旧版） |
+| `book_ids` | number[] | [book_id] | 多归属词书 ID 数组（v5 新增） |
 | `familiarity` | number | 0 | 熟悉度 0~5 |
+
 | `is_favorite` | boolean | false | 是否收藏 |
 | `book_source` | string | '内置词库' | 来源词书名称 |
 | `deleted_at` | string\|null | null | 软删除时间（回收站用） |

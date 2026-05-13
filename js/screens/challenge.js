@@ -22,7 +22,19 @@ class ChallengePage {
     /** 生命值模式初始命数 */
     static LIVES = 3;
 
+    static _cleanupTimers() {
+        if (this._totalTimerInterval) {
+            clearInterval(this._totalTimerInterval);
+            this._totalTimerInterval = null;
+        }
+        if (this._perQuestionTimerInterval) {
+            clearInterval(this._perQuestionTimerInterval);
+            this._perQuestionTimerInterval = null;
+        }
+    }
+
     static async render(container) {
+        this._cleanupTimers();
         await this._cleanRecentWords();
 
         container.innerHTML = `
@@ -37,11 +49,19 @@ class ChallengePage {
 
     // ===================== 冷却机制 =====================
 
+    static _getLocalDateStr(date) {
+        const d = date || new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+
     static async _cleanRecentWords() {
         const recent = await WordDB.getSetting('challenge_recent_words', []);
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - this.COOLDOWN_DAYS);
-        const cutoffStr = cutoff.toISOString().split('T')[0];
+        const cutoffStr = this._getLocalDateStr(cutoff);
         const filtered = recent.filter(r => r.date >= cutoffStr);
         if (filtered.length !== recent.length) {
             await WordDB.saveSetting('challenge_recent_words', filtered);
@@ -87,7 +107,7 @@ class ChallengePage {
 
     static async _recordRecentWords(wordIds) {
         const recent = await WordDB.getSetting('challenge_recent_words', []);
-        const today = new Date().toISOString().split('T')[0];
+        const today = this._getLocalDateStr();
         for (const id of wordIds) {
             if (!recent.some(r => r.wordId === id && r.date === today)) {
                 recent.push({ wordId: id, date: today });
@@ -107,8 +127,9 @@ class ChallengePage {
         const existingIds = new Set(wrongWords.map(w => w.wordId));
         const now = new Date().toISOString();
         for (const q of wrongQuestions) {
-            const word = q.word || q;
-            if (!existingIds.has(word.id) && wrongWords.length < 200) {
+            // q 已经是单词对象（由调用方从 quiz 题目中提取的 .word）
+            const word = q;
+            if (word && word.id && !existingIds.has(word.id) && wrongWords.length < 200) {
                 wrongWords.unshift({
                     wordId: word.id,
                     word: word.word,
@@ -936,7 +957,16 @@ class ChallengePage {
             `;
         }
 
-        document.getElementById('challengeRetryBtn').addEventListener('click', () => this._startGame(container));
+        document.getElementById('challengeRetryBtn').addEventListener('click', async () => {
+            const content = document.getElementById('challengeContent');
+            if (content) {
+                await this._renderStart(content);
+                setTimeout(() => {
+                    const startBtn = document.getElementById('challengeStartBtn');
+                    if (startBtn) startBtn.click();
+                }, 100);
+            }
+        });
         document.getElementById('challengeHomeBtn').addEventListener('click', () => {
             window.location.hash = '#/home';
         });

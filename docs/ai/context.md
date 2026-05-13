@@ -1,7 +1,8 @@
 # WordWiz — 项目上下文
 
 ## 一句话简介
-纯前端离线单词学习 App，数据存浏览器 IndexedDB，通过 Hash 路由实现 6 个页面切换，零框架零依赖。
+纯前端离线单词学习 App，数据存浏览器 IndexedDB，通过 Hash 路由实现 6 个页面切换，零框架，单依赖（Chart.js）。
+
 
 ## 技术栈
 - **语言：** 纯 HTML + CSS + JavaScript（ES6+）
@@ -41,7 +42,8 @@
 ```
 
 ## 多词书拆分（scripts/split_csv.js）
-基于 ecdict.csv 的 tag 列，可生成 6 本词书 JSON：
+基于 ecdict.csv 的 tag 列，可生成 8 本词书 JSON：
+
 | 文件 | 内容 | 标签 |
 |------|------|------|
 | `assets/words_ky.json` | 考研词汇 | ky |

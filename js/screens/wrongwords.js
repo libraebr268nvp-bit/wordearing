@@ -95,7 +95,14 @@ class WrongWordsPage {
     }
 
     static async _renderList(container) {
-        const wrongWords = await WordDB.getSetting('challenge_wrong_words', []);
+        let wrongWords = await WordDB.getSetting('challenge_wrong_words', []);
+
+        // 清理脏数据：移除 wordId 或 word 为空的无效记录
+        const validCount = wrongWords.length;
+        wrongWords = wrongWords.filter(w => w && w.wordId && w.word);
+        if (validCount !== wrongWords.length) {
+            await WordDB.saveSetting('challenge_wrong_words', wrongWords);
+        }
 
         if (wrongWords.length === 0) {
             container.innerHTML = `
@@ -198,23 +205,35 @@ class WrongWordsPage {
             </div>
         `).join('');
 
-        // 单项删除
-        listEl.querySelectorAll('.action-btn.delete').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const wordId = parseInt(btn.dataset.wordid);
+        // 单项删除 - 使用事件代理避免重复绑定
+        listEl._deleteHandler = listEl._deleteHandler || function(e) {
+            const btn = e.target.closest('.action-btn.delete');
+            if (!btn) return;
+            e.stopPropagation();
+            const wordId = parseInt(btn.dataset.wordid);
+            // 用 data 标记防止并发点击触两次
+            if (btn.dataset.deleting === 'true') return;
+            btn.dataset.deleting = 'true';
+            // 注意：btn 即将被移除，不能用 btn 触发 Toast
+            setTimeout(async () => {
                 let words = await WordDB.getSetting('challenge_wrong_words', []);
                 words = words.filter(w => w.wordId !== wordId);
                 await WordDB.saveSetting('challenge_wrong_words', words);
                 window.Toast.show('已移除');
+                // 如果错题集已为空，显示全屏空状态
+                if (words.length === 0) {
+                    this._renderList(container);
+                    return;
+                }
                 // 重新渲染
                 const activeBtn = container.querySelector('#wrongWordsFilter .filter-btn.active');
                 this._renderWords(container, words, activeBtn ? activeBtn.dataset.category : '全部');
                 // 更新总数
                 const totalSpan = container.querySelector('strong');
                 if (totalSpan) totalSpan.textContent = words.length;
-            });
-        });
+            }, 10);
+        }.bind(this);
+        listEl.addEventListener('click', listEl._deleteHandler);
     }
 }
 

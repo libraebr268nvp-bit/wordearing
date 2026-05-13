@@ -145,41 +145,55 @@ class HomePage {
                 resultBox.style.display = 'block';
 
                 resultBox.querySelectorAll('.search-result-item').forEach(el => {
-                    el.addEventListener('click', () => {
+                    el.addEventListener('click', (e) => {
+                        e.stopPropagation();
                         const unit = parseInt(el.dataset.unit);
                         const wordId = parseInt(el.dataset.id);
                         resultBox.style.display = 'none';
                         input.value = '';
                         setTimeout(() => {
                             const mode = AppState.home.sortMode || 'default';
-                            let targetCard, wordEl;
+                            const wordsContainer = container.querySelector('#wordUnits');
+                            let wordEl, scrollTarget;
 
-                            if (mode === 'default') {
-                                // 默认排序：按单元分组，查找 unit-card
-                                targetCard = container.querySelector(`.unit-card[data-unit="${unit}"]`);
-                                if (targetCard) {
-                                    const wordList = targetCard.querySelector('.word-list');
-                                    if (wordList) wordList.style.display = '';
-                                    targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                    wordEl = targetCard.querySelector(`.word-item[data-id="${wordId}"]`);
-                                }
-                            } else {
-                                // 非默认排序：扁平列表，查找 .unit-card 内的单词项
-                                targetCard = container.querySelector(`#wordUnits .unit-card`);
-                                if (targetCard) {
-                                    targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                    wordEl = targetCard.querySelector(`.word-item[data-id="${wordId}"]`);
-                                }
-                            }
+                            // 统一查找：按 data-id 精确查找单词元素
+                            wordEl = wordsContainer?.querySelector(`.word-item[data-id="${wordId}"]`);
 
                             if (wordEl) {
+                                // 高亮该单词
                                 wordEl.style.background = 'rgba(108,140,255,0.15)';
                                 setTimeout(() => { wordEl.style.background = ''; }, 2000);
-                            } else if (targetCard) {
-                                // 如果找不到具体单词（可能当前分类没显示），尝试切换排序并提示
-                                window.Toast.show('🔍 已定位到该单词区域，请展开查看');
+                                // 如果折叠了，展开父级 word-list
+                                const wordList = wordEl.closest('.word-list');
+                                if (wordList) {
+                                    wordList.style.removeProperty('display');
+                                }
+                                wordEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            } else if (mode === 'default') {
+                                // 默认模式但没找到单词：定位到对应的 unit-card 区域
+                                const targetCard = container.querySelector(`.unit-card[data-unit="${unit}"]`);
+                                if (targetCard) {
+                                    const wordList = targetCard.querySelector('.word-list');
+                                    if (wordList) wordList.style.removeProperty('display');
+                                    targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    window.Toast.show('🔍 已定位到该单词区域');
+                                } else {
+                                    window.Toast.show('🔍 该词不在当前分类/词书筛选中，请调整筛选条件');
+                                }
                             } else {
-                                window.Toast.show('🔍 未找到该单词，请检查当前词书筛选是否包含该词');
+                                // 非默认排序且精确找不到
+                                // 可能是单词已被删除或不在当前筛选范围
+                                if (wordsContainer) {
+                                    const anyWord = wordsContainer.querySelector('.word-item');
+                                    if (anyWord) {
+                                        anyWord.closest('.unit-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                        window.Toast.show('🔍 该词不在当前分类/词书筛选中，请调整筛选条件');
+                                    } else {
+                                        window.Toast.show('🔍 未找到该单词');
+                                    }
+                                } else {
+                                    window.Toast.show('🔍 未找到该单词');
+                                }
                             }
                         }, 100);
                     });

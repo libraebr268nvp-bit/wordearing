@@ -50,6 +50,12 @@
 | 收藏夹/错题集导出（JSON/CSV） | 收藏夹/错题集 | `favorites.js` + `wrongwords.js` + `parser.js` | ✅ (5ccc39c) |
 | 多词书拆分（考研/托福/雅思/GRE/高考/中考） | 脚本 | `scripts/split_csv.js` | ✅ (本任务) |
 | 移动端单词卡片适配 | CSS | `css/style.css` | ✅ (5ccc39c) |
+| 搜索点击冲突修复 | 首页 | `home.js` | ✅ (本修复) |
+| 批量导入写入错误跳过 | 数据库 | `connection.js` | ✅ (本修复) |
+| 索引重复创建容错 | 数据库 | `connection.js` | ✅ (本修复) |
+| 提醒日期/统计日期本地时区 | 通知/统计 | `notifications.js` + `stats.dao.js` | ✅ (本修复) |
+| 熟悉度已满提示优化 | 词卡 | `wordCard.js` + `words.dao.js` | ✅ (本修复) |
+| 软删除保留收藏状态 | 数据库 | `words.dao.js` | ✅ (本修复) |
 
 ---
 
@@ -57,11 +63,6 @@
 
 | ID | 文件 | 严重级 | 问题 | 状态 |
 |----|------|--------|------|------|
-| B10 | `db/connection.js` | 🟡 P1 | `onupgradeneeded` 中给旧 words 表创建 book_id 索引时，索引已存在则抛异常 | 待修复 |
-| B11 | `db/connection.js` | 🟡 P1 | `_addBatch` 某条写入失败时 Promise 不 resolve | 待修复 |
-| B12 | `home.js:96` | 🟢 P2 | 搜索框点击外部关闭事件与搜索结果点击冲突 | 待修复 |
-| B13 | `settings.js:22` | 🟢 P2 | 导入用 confirm() 询问，用户不操作时卡住 | 待修复 |
-| B14 | `settings.js:186` | 🟢 P2 | 提醒日期计算使用本地时区 | 待修复 |
 | B15 | `db/connection.js` | 🟢 P2 | `_getAllRaw` 降级 `openCursor` 无二次容错 | 待修复 |
 | B16 | `categoryFilter.js` | ⚪ P3 | 分类硬编码，不随数据库动态生成 | 待修复 |
 | B17 | `notifications.js:13` | ⚪ P3 | 通知图标路径不存在 | 待修复 |
@@ -73,25 +74,31 @@
 | B23 | `challenge.js` | ⚪ P3 | 设置持久化读取没有版本兼容（已有防御） | 注意即可 |
 | B24 | `challenge.js` | ⚪ P3 | `_cleanRecentWords()` 遍历全量冷却记录，数据膨胀后有延迟 | 待优化 |
 | B25 | `wrongwords.js` | ⚪ P3 | 单项删除后重渲染全量列表，缺少虚拟滚动或分页 | 跟踪 |
+| B26 | `settings.js:22` | 🟢 P2 | 导入用 confirm() 询问，用户不操作时卡住 | 待修复 |
 
 ### 已修复的 Bug
+
 | ID | 版本 | 问题 | 修复 |
 |----|------|------|------|
 | B1-B6 | v4 (65d6e0b) | 收藏夹词书过滤/排序NaN/空列表/缓存 | 6 个 P0 |
 | B7 | v3 (36b7b09) | 同页面导航无法重试 | 移除 return 判断 |
 | B8-B9 | v5 (8a52c20) | 异步竞态 + 混序每次 onUpdate 重随机 | generation 锁 + AppState |
+| B10 | 本修复 | `connection.js` 创建重复索引抛异常 | `createIndex` 加 try-catch |
+| B11 | 本修复 | `_addBatch` 某条写入失败 Promise 不 resolve | 循环内 try-catch 跳过错误，用 `resolve(count)` 兜底 |
+| B12 | 本修复 | 搜索框点击外部关闭与搜索结果点击冲突 | 搜索结果加 `e.stopPropagation()` |
+| B14 | 本修复 | 提醒日期计算使用 UTC 时区 | 改用 `_getLocalDateStr()` 本地日期函数 |
 
 ---
 
 ## 📋 待开发
 
 ### 改进任务（按优先级排列）
+
 | ID | 模块 | 优先级 | 说明 |
 |----|------|--------|------|
 | T03 | `categoryFilter.js` | P2 🟡 | 分类硬编码 → 改为动态从数据库读取分类列表 |
 | T04 | `css/style.css` | P2 🟡 | 移动端导航栏折叠动画可优化 |
 | T05 | `favorites.js` | P3 🟢 | 收藏夹使用了 unit-card 样式类名，应改用独立类名 |
-| T06 | `home.js` | P3 🟢 | 搜索框点击外部关闭与搜索结果点击冲突 |
 | T07 | `app.js` | P3 🟢 | 路由 switch-case 可抽象为路由表 |
 | T08 | 全局 | P3 🟢 | 添加页面间过渡动画（目前只有 .page-fade-in） |
 | T09 | `settings.js` | P3 🟢 | 导入时 confirm() 改为模态框，避免卡住 |

@@ -106,11 +106,12 @@ WordDatabase.prototype.updateWord = async function(id, updates) {
 /**
  * 增加熟悉度（上限 5）
  * @param {number} id
- * @returns {Promise<WordModel|null>}
+ * @returns {Promise<WordModel|null>} 返回更新后的单词；如果已是满分返回 null
  */
 WordDatabase.prototype.increaseFamiliarity = async function(id) {
     const word = await this.getWordById(id);
     if (!word) return null;
+    if ((word.familiarity || 0) >= 5) return null; // 已满
     const newFam = Math.min(5, (word.familiarity || 0) + 1);
     const updated = await this.updateWord(id, { familiarity: newFam });
     if (updated) {
@@ -131,16 +132,16 @@ WordDatabase.prototype.toggleFavorite = async function(id) {
 };
 
 /**
- * 软删除单词
+ * 软删除单词（保留收藏状态，回收站还原后可恢复）
  * @param {number} id
  * @returns {Promise<WordModel|null>}
  */
 WordDatabase.prototype.softDeleteWord = async function(id) {
     return this.updateWord(id, { 
-        deleted_at: new Date().toISOString(),
-        is_favorite: false
+        deleted_at: new Date().toISOString()
     });
 };
+
 
 /**
  * 恢复单词（从回收站）

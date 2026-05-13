@@ -58,6 +58,13 @@ WordDatabase.prototype.deleteBook = async function(bookId) {
         }
     }
 
+    // 从 active_books 中移除被删除的词书 ID
+    const activeIds = await this.getActiveBookIds();
+    const filtered = activeIds.filter(id => id !== bookId);
+    if (filtered.length !== activeIds.length) {
+        await this.saveActiveBookIds(filtered);
+    }
+
     return this._delete('books', bookId);
 };
 

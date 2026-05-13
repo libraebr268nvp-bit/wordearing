@@ -313,8 +313,9 @@ window.AppState = {
  4. settings.dao.js            (设置 DAO)
  5. stats.dao.js               (统计 DAO)
  6. books.dao.js               (词书 DAO)
- 7. words.dao.js               (单词 DAO + 21 个方法)
+ 7. words.dao.js               (单词 DAO：CRUD + 查询 + 搜索 + 多归属 + 动态分类)
  8. db/index.js                (WordDB 单例)
+
  9. utils/parser.js            (导入导出)
 10. utils/notifications.js     (通知)
 11. utils/stats.js             (统计图表)
@@ -359,7 +360,9 @@ window.AppState = {
 ## 十、Git 版本记录
 
 ```
-3f5b911 (HEAD) feat: 多归属标签系统 v5 - 单词可同时属于多本词书
+(HEAD)   fix: 文档同步 — 更新 5 份文档反映代码变更
+dbf6799 fix: 搜索定位/错题集修复/索引容错/时区修复等 19 项改进
+3f5b911 feat: 多归属标签系统 v5 - 单词可同时属于多本词书
 c534235 (origin/main) docs: 后续改进方案构思 (v2.0)
 3f34c61 fix: 修复挑战模式熟练度/错题本/搜索定位/提醒系统/导入去重 + 使用手册
 d0b5de2 docs/fix: 文档同步 + CSS 增强 + 词书拆分
@@ -369,6 +372,7 @@ b051fd1 feat: 导航菜单响应式折叠+高亮+淡入淡出动画
 70bce09 挑战模式增强 + 成就系统扩展 + 错题集页面
 8a52c20 v5 架构重写：路由+混序+收藏夹+单元卡片
 7d4b277 fix: 收藏夹导航竞态 + _addBatch 主键冲突 + 全局混序
+
 ```
 
 ---

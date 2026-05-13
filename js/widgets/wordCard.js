@@ -47,28 +47,33 @@ class WordCard {
         famBtn.className = 'action-btn familiar';
         famBtn.title = `熟悉度: ${WordModel.getFamiliarityLabel(word.familiarity)}`;
         famBtn.textContent = '✓';
-        famBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const updated = await WordDB.increaseFamiliarity(word.id);
-            if (updated) {
-                // 更新熟悉度圆点
-                const newDots = row.querySelector('.familiarity-dots');
-                if (newDots) {
-                    newDots.innerHTML = '';
-                    for (let i = 0; i < 5; i++) {
-                        const dot = document.createElement('span');
-                        dot.className = `fam-dot ${i < updated.familiarity ? 'filled' : ''}`;
-                        newDots.appendChild(dot);
-                    }
+            famBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if ((word.familiarity || 0) >= 5) {
+                    window.Toast.show('✅ 熟悉度已满，无需再学');
+                    return;
                 }
-                famBtn.title = `熟悉度: ${WordModel.getFamiliarityLabel(updated.familiarity)}`;
-                window.Toast.show(`✓ "${updated.word}" 熟悉度 +1`);
-                // 成就：记录学习动作
-                await AchievementHelper.recordStudy();
-                // 通知刷新统计
-                if (options.onUpdate) options.onUpdate();
-            }
-        });
+                const updated = await WordDB.increaseFamiliarity(word.id);
+                if (updated) {
+                    // 更新熟悉度圆点
+                    const newDots = row.querySelector('.familiarity-dots');
+                    if (newDots) {
+                        newDots.innerHTML = '';
+                        for (let i = 0; i < 5; i++) {
+                            const dot = document.createElement('span');
+                            dot.className = `fam-dot ${i < updated.familiarity ? 'filled' : ''}`;
+                            newDots.appendChild(dot);
+                        }
+                    }
+                    famBtn.title = `熟悉度: ${WordModel.getFamiliarityLabel(updated.familiarity)}`;
+                    window.Toast.show(`✓ "${updated.word}" 熟悉度 +1`);
+                    // 成就：记录学习动作
+                    await AchievementHelper.recordStudy();
+                    // 通知刷新统计
+                    if (options.onUpdate) options.onUpdate();
+                }
+            });
+
         actions.appendChild(famBtn);
 
         // 收藏按钮
