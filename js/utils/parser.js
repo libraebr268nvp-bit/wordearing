@@ -9,6 +9,10 @@
  * v4 修复：
  * - 多词书重复导入时保留原有 book_id 和 category 不被覆盖
  * - 导入时如果词已存在，只补充空释义，不改变归属
+ * 
+ * v5 升级（多归属标签系统）：
+ * - 重复单词不再简单跳过，而是将新词书的 book_id 追加到 book_ids 数组
+ * - 单词同时属于多本词书，筛选任一词书都能显示
  */
 
 class WordParser {
@@ -27,7 +31,7 @@ class WordParser {
      * 否则回退到按位置解析（兼容旧格式）。
      */
     static async parseCSV(csvText, options = {}) {
-        const result = { success: 0, skipped: 0, errors: [], createdBookId: null, bookName: '' };
+        const result = { success: 0, skipped: 0, multiTagged: 0, errors: [], createdBookId: null, bookName: '' };
 
         try {
             const lines = csvText.split(/\r?\n/).filter(line => line.trim());
@@ -111,20 +115,28 @@ class WordParser {
                         continue;
                     }
 
-                    // 去重检测 — 保留原有 book_id 和 category 不被动覆盖
+                    // ★ v5 多归属处理：重复单词不再简单跳过 → 追加到 book_ids
                     const existing = await WordDB.findWordByText(word);
                     if (existing) {
+                        // 如果当前导入的词书 ID 不在已有 book_ids 中，追加归属
+                        const currentIds = WordModel.getBookIds(existing);
+                        if (!currentIds.includes(rowBookId)) {
+                            currentIds.push(rowBookId);
+                            await WordDB.updateWord(existing.id, { book_ids: currentIds });
+                            result.multiTagged++;
+                        }
+
+                        // 可选：补充释义（如果原有释义为空）
                         if (options.onDuplicate === 'overwrite') {
-                            // 只补充释义（如果现有释义为空），不覆盖词书和分类归属
                             const updateData = {};
                             if (!existing.definition || existing.definition === '(无释义)') {
                                 updateData.definition = definition;
                             }
-                            // 保留原有的 book_id 和 category 不变
                             if (Object.keys(updateData).length > 0) {
                                 await WordDB.updateWord(existing.id, updateData);
                             }
                         }
+                        
                         result.skipped++;
                         continue;
                     }
@@ -132,6 +144,7 @@ class WordParser {
                     await WordDB.addWord({
                         word, definition, category, unit,
                         book_id: rowBookId,
+                        book_ids: [rowBookId],
                         book_source: bookSource || options.bookSource || '导入词库'
                     });
                     result.success++;
@@ -172,10 +185,10 @@ class WordParser {
     /**
      * 解析 JSON 文本
      * 
-     * v4: 多词书重复导入时保留原有 book_id 和 category 不被覆盖
+     * v5: 多词书重复导入时追加 book_ids，而非简单跳过
      */
     static async parseJSON(jsonText, options = {}) {
-        const result = { success: 0, skipped: 0, errors: [], createdBookId: null, bookName: '' };
+        const result = { success: 0, skipped: 0, multiTagged: 0, errors: [], createdBookId: null, bookName: '' };
 
         try {
             const data = JSON.parse(jsonText);
@@ -205,16 +218,25 @@ class WordParser {
                         continue;
                     }
 
-                    // 去重检测 — 保留原有 book_id 和 category 不被动覆盖
+                    // ★ v5 多归属处理
                     const existing = await WordDB.findWordByText(item.word);
                     if (existing) {
-                        // 只补充释义（如果原有释义为空），不改变原有词书归属和分类
-                        const updateData = {};
-                        if (!existing.definition || existing.definition === '(无释义)') {
-                            updateData.definition = item.definition || existing.definition;
+                        const currentIds = WordModel.getBookIds(existing);
+                        if (!currentIds.includes(bookId)) {
+                            currentIds.push(bookId);
+                            await WordDB.updateWord(existing.id, { book_ids: currentIds });
+                            result.multiTagged++;
                         }
-                        if (Object.keys(updateData).length > 0) {
-                            await WordDB.updateWord(existing.id, updateData);
+
+                        // 可选：补充释义
+                        if (options.onDuplicate === 'overwrite') {
+                            const updateData = {};
+                            if (!existing.definition || existing.definition === '(无释义)') {
+                                updateData.definition = item.definition || existing.definition;
+                            }
+                            if (Object.keys(updateData).length > 0) {
+                                await WordDB.updateWord(existing.id, updateData);
+                            }
                         }
                         result.skipped++;
                         continue;
@@ -225,7 +247,8 @@ class WordParser {
                         definition: item.definition || '',
                         category: item.category || '其他',
                         unit: item.unit || 1,
-                        book_id: item.book_id || bookId,
+                        book_id: bookId,
+                        book_ids: [bookId],
                         book_source: options.bookSource || '导入词库'
                     });
                     result.success++;
@@ -287,6 +310,7 @@ class WordParser {
                 category: w.category,
                 unit: w.unit,
                 book_id: w.book_id,
+                book_ids: w.book_ids,
                 familiarity: w.familiarity,
                 is_favorite: w.is_favorite
             }))

@@ -2,6 +2,7 @@
  * WordWiz - 单词数据访问层（DAO）
  * 
  * 依赖：connection.js（WordDatabase 类已定义）
+ * v5 更新：全面支持 book_ids 多归属词书查询
  * 给 WordDatabase.prototype 添加单词相关方法
  */
 
@@ -18,12 +19,14 @@ WordDatabase.prototype.getAllWords = async function() {
 
 /**
  * 根据词书 ID 列表获取未删除单词
+ * 使用 book_ids 多归属字段：只要单词的 book_ids 中包含任一指定 bookId 即可
  * @param {number[]} bookIds
  * @returns {Promise<WordModel[]>}
  */
 WordDatabase.prototype.getWordsByBooks = async function(bookIds) {
+    if (!bookIds || bookIds.length === 0) return [];
     const results = await this._getAllRaw('words', row => 
-        this._isNotDeleted(row) && bookIds.includes(row.book_id)
+        this._isNotDeleted(row) && WordModel.belongsToBook(row, bookIds)
     );
     return results.map(r => WordModel.fromRow(r)).filter(r => r !== null);
 };
@@ -193,7 +196,7 @@ WordDatabase.prototype.autoCleanTrash = async function(days = 30) {
 /**
  * 按分类筛选单词
  * @param {string} category - '全部' 表示不过滤
- * @param {number[]} [bookIds] - 可选词书过滤
+ * @param {number[]} [bookIds] - 可选词书 ID 列表（多归属查询）
  * @returns {Promise<WordModel[]>}
  */
 WordDatabase.prototype.getWordsByCategory = async function(category, bookIds = null) {
@@ -220,7 +223,7 @@ WordDatabase.prototype.getWordsByUnit = async function(unit) {
 /**
  * 获取收藏单词
  * @param {string} [category] - 分类过滤
- * @param {number[]} [bookIds] - 词书过滤
+ * @param {number[]} [bookIds] - 词书 ID 列表（多归属查询）
  * @returns {Promise<WordModel[]>}
  */
 WordDatabase.prototype.getFavoriteWords = async function(category = null, bookIds = null) {
@@ -262,4 +265,35 @@ WordDatabase.prototype.searchWords = async function(keyword) {
     ).slice(0, 50);
 };
 
-console.log('[WordWiz DAO] words.dao.js 已加载 — 17 个单词方法已挂载');
+/**
+ * 计算每本词书的单词数量（基于多归属 book_ids）
+ * @returns {Promise<Object<number, number>>} { bookId: count }
+ */
+WordDatabase.prototype.getWordCountPerBook = async function() {
+    const all = await this.getAllWords();
+    const books = await this.getBooks();
+    const result = {};
+    for (const book of books) {
+        let count = 0;
+        for (const word of all) {
+            if (WordModel.belongsToBook(word, book.id)) {
+                count++;
+            }
+        }
+        result[book.id] = count;
+    }
+    return result;
+};
+
+/**
+ * 获取已激活词书的单词数量（按多归属 book_ids）
+ * @returns {Promise<number>}
+ */
+WordDatabase.prototype.getActiveWordsCount = async function() {
+    const activeIds = await this.getActiveBookIds();
+    if (activeIds.length === 0) return 0;
+    const words = await this.getWordsByBooks(activeIds);
+    return words.length;
+};
+
+console.log('[WordWiz DAO] words.dao.js 已加载 — 20 个单词方法已挂载');

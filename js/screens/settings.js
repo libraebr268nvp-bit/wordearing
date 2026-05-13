@@ -203,14 +203,16 @@ class SettingsPage {
                     await this._renderBookManagement(container);
                 }
 
-                let html = `<div class="import-result ${result.success > 0 ? 'success' : 'error'}">`;
-                html += `📥 导入完成：成功 ${result.success} 个`;
-                if (result.skipped > 0) html += `，跳过 ${result.skipped} 个（重复）`;
-                if (result.createdBookId) html += `<br>📚 已自动创建新词书「${result.bookName}」`;
-                if (result.errors.length > 0) {
-                    html += `<br><span style="font-size:12px;">错误：${result.errors.slice(0, 3).join('；')}</span>`;
-                }
-                html += '</div>';
+                    let html = `<div class="import-result ${result.success > 0 ? 'success' : 'error'}">`;
+                    html += `📥 导入完成：成功 ${result.success} 个`;
+                    if (result.skipped > 0) html += `，跳过 ${result.skipped} 个（重复）`;
+                    if (result.multiTagged > 0) html += `<br>🏷️ ${result.multiTagged} 个单词已追加多词书记录（同时属于多本词书）`;
+                    if (result.createdBookId) html += `<br>📚 已自动创建新词书「${result.bookName}」`;
+                    if (result.errors.length > 0) {
+                        html += `<br><span style="font-size:12px;">错误：${result.errors.slice(0, 3).join('；')}</span>`;
+                    }
+                    html += '</div>';
+
                 resultContainer.innerHTML = html;
 
                 if (result.success > 0) {

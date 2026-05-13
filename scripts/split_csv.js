@@ -43,10 +43,12 @@ function parseTags(tagStr) {
 
 /**
  * 清理释义
+ * 如果清洗后为空，保留原始翻译（至少有个可用的释义）
  */
 function cleanTranslation(text) {
   if (!text) return '';
-  return text
+  const original = text.trim();
+  let cleaned = text
     .replace(/<br\s*\/?>/gi, '；')
     .replace(/\n/g, '；')
     .replace(/\r/g, '')
@@ -55,7 +57,14 @@ function cleanTranslation(text) {
     .replace(/[；;，,]+$/, '')
     .trim()
     .slice(0, 200);
+  
+  // 如果清洗后为空，保留原始翻译（确保每个导入的单词至少有一个可读的释义）
+  if (!cleaned || cleaned.length < 2) {
+    return original.slice(0, 200);
+  }
+  return cleaned;
 }
+
 
 /**
  * 将一行 CSV 解析为对象

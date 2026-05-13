@@ -2,6 +2,7 @@
  * WordWiz - 统计数据访问层（DAO）
  * 
  * 依赖：connection.js（WordDatabase 类已定义）
+ * v5 新增：getBookWordCounts() — 基于 book_ids 多归属统计每本词书单词数
  * 给 WordDatabase.prototype 添加统计相关方法
  */
 
@@ -20,6 +21,24 @@ WordDatabase.prototype.getStats = async function() {
         favoriteCount: favorites.length,
         trashCount: trash.length
     };
+};
+
+/**
+ * 获取每本词书的单词统计（基于 book_ids 多归属）
+ * @returns {Promise<{bookId: number, bookName: string, wordCount: number}[]>}
+ */
+WordDatabase.prototype.getBookWordCounts = async function() {
+    const books = await this.getBooks();
+    const all = await this.getAllWords();
+    return books.map(book => {
+        let count = 0;
+        for (const word of all) {
+            if (WordModel.belongsToBook(word, book.id)) {
+                count++;
+            }
+        }
+        return { bookId: book.id, bookName: book.name, wordCount: count };
+    });
 };
 
 /**
@@ -65,4 +84,4 @@ WordDatabase.prototype.getStudyTrend = async function(days = 7) {
     });
 };
 
-console.log('[WordWiz DAO] stats.dao.js 已加载 — 3 个统计方法已挂载');
+console.log('[WordWiz DAO] stats.dao.js 已加载 — 4 个统计方法已挂载');
