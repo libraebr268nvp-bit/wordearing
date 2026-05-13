@@ -631,9 +631,7 @@ class ChallengePage {
         const q = this._currentQuiz[this._currentIndex];
         const isCorrect = selectedIndex === q.correctIndex;
 
-        await this._updateFamiliarity(q.word, isCorrect);
-
-        // 标记答案
+        // 标记答案（在更新熟悉度之前先标记，避免重复 push wrongIndices）
         document.querySelectorAll('.challenge-option').forEach(btn => {
             btn.style.pointerEvents = 'none';
             const idx = parseInt(btn.dataset.index);
@@ -651,6 +649,9 @@ class ChallengePage {
         clickedBtn.innerHTML += isCorrect
             ? ' <span style="margin-left:auto;font-size:18px;">✅</span>'
             : ' <span style="margin-left:auto;font-size:18px;">❌</span>';
+
+        // 更新熟悉度（_updateFamiliarity 内部已处理 correctCount/错误记录/生命值）
+        await this._updateFamiliarity(q.word, isCorrect);
 
         this._advanceAfterDelay(container, 800);
     }
@@ -749,9 +750,8 @@ class ChallengePage {
             if (skipBtn) skipBtn.disabled = true;
         }
 
-        // 超时当作答错
-        this._recordWrongAnswer(q.word);
-        this._wrongIndices.push(this._currentIndex);
+        // 超时当作答错 — 更新熟悉度（_updateFamiliarity 内部已处理错误记录/生命值）
+        this._updateFamiliarity(q.word, false);
 
         this._advanceAfterDelay(container, 1200);
     }
@@ -780,12 +780,11 @@ class ChallengePage {
         }
     }
 
+    /** @deprecated 不再使用 — _updateFamiliarity 已统一处理 */
     static _recordWrongAnswer(word) {
-        // 仅用于超时场景
-        this._wrongIndices.push(this._currentIndex);
-        this._streakCount = 0;
-        if (this._hasLivesMode) this._lives--;
+        // 保留此方法仅为兼容性，实际不再被调用
     }
+
 
     static _advanceAfterDelay(container, delay) {
         if (this._perQuestionTimerInterval) {

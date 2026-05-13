@@ -5,6 +5,10 @@
  * - 支持 targetBookId 参数
  * - 自动创建词书（如果指定了 bookSource 且不存在）
  * - 结果返回 createdBookId / bookName
+ * 
+ * v4 修复：
+ * - 多词书重复导入时保留原有 book_id 和 category 不被覆盖
+ * - 导入时如果词已存在，只补充空释义，不改变归属
  */
 
 class WordParser {
@@ -107,17 +111,21 @@ class WordParser {
                         continue;
                     }
 
-                    // 去重检测
+                    // 去重检测 — 保留原有 book_id 和 category 不被动覆盖
                     const existing = await WordDB.findWordByText(word);
                     if (existing) {
                         if (options.onDuplicate === 'overwrite') {
-                            await WordDB.updateWord(existing.id, {
-                                definition, category, unit, book_id: rowBookId
-                            });
-                            result.success++;
-                        } else {
-                            result.skipped++;
+                            // 只补充释义（如果现有释义为空），不覆盖词书和分类归属
+                            const updateData = {};
+                            if (!existing.definition || existing.definition === '(无释义)') {
+                                updateData.definition = definition;
+                            }
+                            // 保留原有的 book_id 和 category 不变
+                            if (Object.keys(updateData).length > 0) {
+                                await WordDB.updateWord(existing.id, updateData);
+                            }
                         }
+                        result.skipped++;
                         continue;
                     }
 
@@ -163,6 +171,8 @@ class WordParser {
 
     /**
      * 解析 JSON 文本
+     * 
+     * v4: 多词书重复导入时保留原有 book_id 和 category 不被覆盖
      */
     static async parseJSON(jsonText, options = {}) {
         const result = { success: 0, skipped: 0, errors: [], createdBookId: null, bookName: '' };
@@ -195,19 +205,18 @@ class WordParser {
                         continue;
                     }
 
+                    // 去重检测 — 保留原有 book_id 和 category 不被动覆盖
                     const existing = await WordDB.findWordByText(item.word);
                     if (existing) {
-                        if (options.onDuplicate === 'overwrite') {
-                            await WordDB.updateWord(existing.id, {
-                                definition: item.definition || existing.definition,
-                                category: item.category || existing.category,
-                                unit: item.unit || existing.unit,
-                                book_id: bookId
-                            });
-                            result.success++;
-                        } else {
-                            result.skipped++;
+                        // 只补充释义（如果原有释义为空），不改变原有词书归属和分类
+                        const updateData = {};
+                        if (!existing.definition || existing.definition === '(无释义)') {
+                            updateData.definition = item.definition || existing.definition;
                         }
+                        if (Object.keys(updateData).length > 0) {
+                            await WordDB.updateWord(existing.id, updateData);
+                        }
+                        result.skipped++;
                         continue;
                     }
 

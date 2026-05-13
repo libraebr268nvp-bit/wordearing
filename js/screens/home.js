@@ -151,16 +151,35 @@ class HomePage {
                         resultBox.style.display = 'none';
                         input.value = '';
                         setTimeout(() => {
-                            const targetCard = container.querySelector(`.unit-card[data-unit="${unit}"]`);
-                            if (targetCard) {
-                                const wordList = targetCard.querySelector('.word-list');
-                                if (wordList) wordList.style.display = '';
-                                targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                const wordEl = targetCard.querySelector(`.word-item[data-id="${wordId}"]`);
-                                if (wordEl) {
-                                    wordEl.style.background = 'rgba(108,140,255,0.15)';
-                                    setTimeout(() => { wordEl.style.background = ''; }, 2000);
+                            const mode = AppState.home.sortMode || 'default';
+                            let targetCard, wordEl;
+
+                            if (mode === 'default') {
+                                // 默认排序：按单元分组，查找 unit-card
+                                targetCard = container.querySelector(`.unit-card[data-unit="${unit}"]`);
+                                if (targetCard) {
+                                    const wordList = targetCard.querySelector('.word-list');
+                                    if (wordList) wordList.style.display = '';
+                                    targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    wordEl = targetCard.querySelector(`.word-item[data-id="${wordId}"]`);
                                 }
+                            } else {
+                                // 非默认排序：扁平列表，查找 .unit-card 内的单词项
+                                targetCard = container.querySelector(`#wordUnits .unit-card`);
+                                if (targetCard) {
+                                    targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    wordEl = targetCard.querySelector(`.word-item[data-id="${wordId}"]`);
+                                }
+                            }
+
+                            if (wordEl) {
+                                wordEl.style.background = 'rgba(108,140,255,0.15)';
+                                setTimeout(() => { wordEl.style.background = ''; }, 2000);
+                            } else if (targetCard) {
+                                // 如果找不到具体单词（可能当前分类没显示），尝试切换排序并提示
+                                window.Toast.show('🔍 已定位到该单词区域，请展开查看');
+                            } else {
+                                window.Toast.show('🔍 未找到该单词，请检查当前词书筛选是否包含该词');
                             }
                         }, 100);
                     });
