@@ -13,6 +13,9 @@
     <!-- 内联 SVG favicon，避免浏览器 404 请求 -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>" />
 
+    <!-- Manifest (PWA 支持) -->
+    <link rel="manifest" href="manifest.json" />
+    
     <!-- 样式 -->
     <link rel="stylesheet" href="css/style.css" />
     
@@ -76,13 +79,13 @@
     <script src="js/models/word.js?v=6"></script>
     <!-- 数据库连接层 + DAO（按依赖顺序：基类 → 各DAO → 实例化） -->
     <script src="js/db/connection.js?v=8"></script>
-    <script src="js/db/settings.dao.js?v=6"></script>
-    <script src="js/db/stats.dao.js?v=6"></script>
+    <script src="js/db/settings.dao.js?v=7"></script>
+    <script src="js/db/stats.dao.js?v=7"></script>
     <script src="js/db/books.dao.js?v=6"></script>
     <script src="js/db/words.dao.js?v=8"></script>
     <script src="js/db/index.js?v=6"></script>
     <!-- 工具类 -->
-    <script src="js/utils/parser.js?v=6"></script>
+    <script src="js/utils/parser.js?v=7"></script>
     <script src="js/utils/notifications.js?v=6"></script>
     <script src="js/utils/stats.js?v=6"></script>
     <script src="js/utils/achievements.js?v=1"></script>
@@ -96,7 +99,7 @@
     <script src="js/screens/home.js?v=7"></script>
     <script src="js/screens/favorites.js?v=6"></script>
     <script src="js/screens/trash.js?v=5"></script>
-    <script src="js/screens/settings.js?v=6"></script>
+    <script src="js/screens/settings.js?v=7"></script>
     <script src="js/screens/challenge.js?v=5"></script>
     <script src="js/screens/wrongwords.js?v=2"></script>
     <!-- 主入口 -->

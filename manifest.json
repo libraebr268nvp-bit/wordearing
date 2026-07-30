@@ -1,0 +1,12 @@
+{
+  "name": "WordWiz",
+  "short_name": "WordWiz",
+  "description": "Cross-platform vocabulary learning app",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#1E1E2E",
+  "theme_color": "#1E1E2E",
+  "orientation": "portrait"
+}
+</manifest.json>
+</write_to_file>

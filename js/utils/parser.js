@@ -403,6 +403,272 @@ class WordParser {
         });
         return [header, ...rows].join('\n');
     }
+    // ===================== 完整学习进度导出/导入 =====================
+
+    /**
+     * 导出全部学习进度（含所有数据，用于跨设备同步）
+     * 包含：单词、词书、设置、统计、成就、挑战历史、错题集
+     */
+    static async exportFullProgress() {
+        const allWords = await WordDB.getAllWords();
+        const allBooks = await WordDB.getBooks();
+        const allSettings = await WordDB.getAllSettings();
+        const allStats = await WordDB.getAllStats();
+        const activeBookIds = await WordDB.getActiveBookIds();
+
+        // 成就状态
+        const achievements = {};
+        const achievementKeys = [
+            'achievement_challenge_count',
+            'achievement_first_completed',
+            'achievement_perfect_count',
+            'achievement_speed_count',
+            'achievement_streak_count',
+            'achievement_fav_count',
+            'achievement_trash_cleaned',
+            'achievement_familiar_count',
+            'achievement_type_count',
+            'achievement_words_learned'
+        ];
+        for (const key of achievementKeys) {
+            achievements[key] = await WordDB.getSetting(key, 0);
+        }
+
+        // 挑战历史
+        const challengeHistory = await WordDB.getSetting('challenge_history', []);
+        const wrongWords = await WordDB.getSetting('challenge_wrong_words', []);
+        const recentWords = await WordDB.getSetting('challenge_recent_words', []);
+
+        // 收藏夹导出额外信息
+        const favoriteWords = await WordDB.getFavoriteWords('全部');
+
+        return JSON.stringify({
+            exportDate: new Date().toISOString(),
+            app: 'WordWiz',
+            version: '1.0.0',
+            type: 'full-progress',
+
+            // 词书
+            books: allBooks.map(b => ({
+                name: b.name,
+                description: b.description || '',
+                is_system: b.is_system || false
+            })),
+
+            // 激活词书 IDs (按名称引用)
+            activeBookNames: allBooks
+                .filter(b => activeBookIds.includes(b.id))
+                .map(b => b.name),
+
+            // 单词
+            words: allWords.map(w => ({
+                word: w.word,
+                definition: w.definition,
+                category: w.category,
+                unit: w.unit,
+                book_name: w.book_source || '',
+                familiarity: w.familiarity || 0,
+                is_favorite: w.is_favorite || false,
+                due_date: w.due_date || null,
+                created_at: w.created_at
+            })),
+
+            // 设置
+            settings: allSettings,
+
+            // 学习统计
+            stats: allStats,
+
+            // 成就
+            achievements: achievements,
+
+            // 挑战记录
+            challenge_history: challengeHistory,
+            wrong_words: wrongWords,
+            challenge_recent_words: recentWords,
+
+            // 收藏单词总数
+            favorite_count: favoriteWords.length
+        }, null, 2);
+    }
+
+    /**
+     * 导入完整学习进度
+     * @param {string} jsonText - 导出的 JSON 文本
+     * @returns {{success: boolean, message: string, details: object}}
+     */
+    static async importFullProgress(jsonText) {
+        const result = { success: false, message: '', details: { wordsImported: 0, booksImported: 0, settingsImported: 0, statsImported: 0 } };
+
+        try {
+            const data = JSON.parse(jsonText);
+
+            // 校验
+            if (!data || data.type !== 'full-progress') {
+                result.message = '无效的备份文件：格式不正确';
+                return result;
+            }
+
+            // 1. 导入词书（先词书后单词，因为单词依赖词书）
+            const bookNameMap = {}; // 旧名称 → 新 ID
+            if (data.books && data.books.length > 0) {
+                for (const book of data.books) {
+                    const existingBooks = await WordDB.getBooks();
+                    let existing = existingBooks.find(b => b.name === book.name);
+                    if (!existing) {
+                        const newId = await WordDB.addBook({
+                            name: book.name,
+                            description: book.description || '',
+                            is_system: book.is_system || false
+                        });
+                        bookNameMap[book.name] = newId;
+                    } else {
+                        bookNameMap[book.name] = existing.id;
+                    }
+                    result.details.booksImported++;
+                }
+            }
+
+            // 2. 导入单词
+            if (data.words && data.words.length > 0) {
+                const books = await WordDB.getBooks();
+                const defaultBookId = books.length > 0 ? books[0].id : 1;
+
+                for (const w of data.words) {
+                    // 确定归属词书 ID
+                    let bookId = defaultBookId;
+                    if (w.book_name && bookNameMap[w.book_name]) {
+                        bookId = bookNameMap[w.book_name];
+                    } else if (w.book_name) {
+                        // 尝试按名称查找
+                        const found = books.find(b => b.name === w.book_name);
+                        if (found) bookId = found.id;
+                    }
+
+                    // 去重：按单词名查找
+                    const existing = await WordDB.findWordByText(w.word);
+                    if (existing) {
+                        // 已有则更新熟悉度、收藏、due_date
+                        const updateData = {};
+                        if (w.familiarity !== undefined && w.familiarity > (existing.familiarity || 0)) {
+                            updateData.familiarity = w.familiarity;
+                        }
+                        if (w.is_favorite) {
+                            updateData.is_favorite = true;
+                        }
+                        if (w.due_date && (!existing.due_date || w.due_date > existing.due_date)) {
+                            updateData.due_date = w.due_date;
+                        }
+                        // 追加词书归属
+                        const currentBookIds = WordModel.getBookIds(existing);
+                        if (!currentBookIds.includes(bookId)) {
+                            currentBookIds.push(bookId);
+                            updateData.book_ids = currentBookIds;
+                        }
+                        if (Object.keys(updateData).length > 0) {
+                            await WordDB.updateWord(existing.id, updateData);
+                        }
+                    } else {
+                        // 新单词
+                        await WordDB.addWord({
+                            word: w.word,
+                            definition: w.definition || '',
+                            category: w.category || '其他',
+                            unit: w.unit || 1,
+                            book_id: bookId,
+                            book_ids: [bookId],
+                            book_source: w.book_name || '导入词库',
+                            familiarity: w.familiarity || 0,
+                            is_favorite: w.is_favorite || false,
+                            due_date: w.due_date || null,
+                            created_at: w.created_at || new Date().toISOString()
+                        });
+                    }
+                    result.details.wordsImported++;
+                }
+            }
+
+            // 3. 导入设置（非覆盖，只补充缺失项）
+            if (data.settings && data.settings.length > 0) {
+                for (const s of data.settings) {
+                    const existing = await WordDB.getSetting(s.key, null);
+                    if (existing === null) {
+                        await WordDB.saveSetting(s.key, s.value);
+                        result.details.settingsImported++;
+                    }
+                }
+            }
+
+            // 4. 导入成就
+            if (data.achievements) {
+                for (const [key, value] of Object.entries(data.achievements)) {
+                    const existing = await WordDB.getSetting(key, 0);
+                    if (value > existing) {
+                        await WordDB.saveSetting(key, value);
+                    }
+                }
+            }
+
+            // 5. 导入挑战历史（合并去重）
+            if (data.challenge_history && data.challenge_history.length > 0) {
+                const existing = await WordDB.getSetting('challenge_history', []);
+                const existingDates = new Set(existing.map(h => h.date + h.correct + h.total));
+                const newItems = data.challenge_history.filter(h => !existingDates.has(h.date + h.correct + h.total));
+                if (newItems.length > 0) {
+                    await WordDB.saveSetting('challenge_history', [...existing, ...newItems]);
+                }
+            }
+
+            // 6. 导入错题集（合并去重）
+            if (data.wrong_words && data.wrong_words.length > 0) {
+                const existing = await WordDB.getSetting('challenge_wrong_words', []);
+                const existingIds = new Set(existing.map(w => w.wordId));
+                const newWords = data.wrong_words.filter(w => !existingIds.has(w.wordId));
+                if (newWords.length > 0) {
+                    const merged = [...existing, ...newWords];
+                    // 限制最多 200 条
+                    if (merged.length > 200) merged.splice(0, merged.length - 200);
+                    await WordDB.saveSetting('challenge_wrong_words', merged);
+                }
+            }
+
+            // 7. 导入学习统计
+            if (data.stats && data.stats.length > 0) {
+                const existing = await WordDB.getAllStats();
+                const existingDates = new Set(existing.map(s => s.date + s.type));
+                const newStats = data.stats.filter(s => !existingDates.has(s.date + s.type));
+                for (const s of newStats) {
+                    await WordDB.addStat({
+                        date: s.date,
+                        type: s.type,
+                        value: s.value || 0,
+                        count: s.count || 0
+                    });
+                    result.details.statsImported++;
+                }
+            }
+
+            // 8. 设置激活词书
+            if (data.activeBookNames && data.activeBookNames.length > 0) {
+                const books = await WordDB.getBooks();
+                const activeIds = data.activeBookNames
+                    .map(name => books.find(b => b.name === name))
+                    .filter(Boolean)
+                    .map(b => b.id);
+                if (activeIds.length > 0) {
+                    await WordDB.saveActiveBookIds(activeIds);
+                }
+            }
+
+            result.success = true;
+            result.message = '导入完成！';
+        } catch (err) {
+            result.message = '导入失败：' + err.message;
+        }
+
+        return result;
+    }
+
 }
 
 window.WordParser = WordParser;

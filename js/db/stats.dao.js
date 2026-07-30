@@ -95,5 +95,28 @@ WordDatabase.prototype.getStudyTrend = async function(days = 7) {
     });
 };
 
-console.log('[WordWiz DAO] stats.dao.js 已加载 — 4 个统计方法已挂载');
+/**
+ * 获取所有统计记录（用于导出）
+ * @returns {Promise<Array>}
+ */
+WordDatabase.prototype.getAllStats = async function() {
+    return this._getAll('stats');
+};
+
+/**
+ * 添加统计记录
+ * @param {{date: string, type: string, value: number, count: number}} statData
+ * @returns {Promise<number>} 记录 ID
+ */
+WordDatabase.prototype.addStat = async function(statData) {
+    return this._add('stats', {
+        date: statData.date,
+        type: statData.type,
+        value: statData.value || 0,
+        count: statData.count || 0,
+        timestamp: new Date().toISOString()
+    });
+};
+
+console.log('[WordWiz DAO] stats.dao.js 已加载 — 6 个统计方法已挂载');
 

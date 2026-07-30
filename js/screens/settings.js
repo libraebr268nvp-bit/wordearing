@@ -68,6 +68,77 @@ class SettingsPage {
                 </div>
             </div>
 
+            <!-- 学习进度备份与恢复（跨设备同步） -->
+            <div class="settings-section">
+                <h3>💾 学习进度备份</h3>
+                <div class="setting-desc" style="margin-top:-8px;margin-bottom:12px;font-size:12px;">
+                    用导出功能备份你的学习进度，到另一台设备导入即可同步
+                </div>
+                <div class="setting-row">
+                    <div>
+                        <div class="setting-label">📤 导出全部进度</div>
+                        <div class="setting-desc">包含单词数据、熟悉度、收藏、成就、挑战记录、统计</div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" id="exportProgressBtn">📥 导出备份</button>
+                </div>
+                <div class="setting-row">
+                    <div>
+                        <div class="setting-label">📥 导入进度备份</div>
+                        <div class="setting-desc">选择之前导出的 .json 备份文件恢复数据</div>
+                    </div>
+                    <input type="file" id="importProgressInput" accept=".json" style="display:none" />
+                    <button class="btn btn-sm" id="importProgressBtn">📂 选择文件导入</button>
+                </div>
+                <div id="progressResult" style="font-size:13px;margin-top:8px;"></div>
+            </div>
+
+            <!-- 在线词库下载 -->
+            <div class="settings-section" id="onlineLibSection">
+                <h3>📚 在线词库下载</h3>
+                <div class="setting-desc" style="margin-top:-8px;margin-bottom:12px;font-size:12px;">
+                    一键导入更多词库，扩充你的学习内容
+                </div>
+                <div id="onlineLibList" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:12px;">
+                    <div class="lib-card" data-url="assets/words_cet4.json" data-name="四级词汇" style="background:var(--bg-secondary);border-radius:var(--radius-sm);padding:12px;cursor:pointer;border:1px solid var(--border-color);transition:var(--transition);">
+                        <div style="font-weight:600;font-size:14px;color:var(--text-primary);">📗 CET-4</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">大学英语四级 · ~4600词</div>
+                    </div>
+                    <div class="lib-card" data-url="assets/words_cet6.json" data-name="六级词汇" style="background:var(--bg-secondary);border-radius:var(--radius-sm);padding:12px;cursor:pointer;border:1px solid var(--border-color);transition:var(--transition);">
+                        <div style="font-weight:600;font-size:14px;color:var(--text-primary);">📘 CET-6</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">大学英语六级 · ~4350词</div>
+                    </div>
+                    <div class="lib-card" data-url="assets/words_ky.json" data-name="考研词汇" style="background:var(--bg-secondary);border-radius:var(--radius-sm);padding:12px;cursor:pointer;border:1px solid var(--border-color);transition:var(--transition);">
+                        <div style="font-weight:600;font-size:14px;color:var(--text-primary);">📙 考研</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">全国硕士研究生 · ~4800词</div>
+                    </div>
+                    <div class="lib-card" data-url="assets/words_toefl.json" data-name="托福词汇" style="background:var(--bg-secondary);border-radius:var(--radius-sm);padding:12px;cursor:pointer;border:1px solid var(--border-color);transition:var(--transition);">
+                        <div style="font-weight:600;font-size:14px;color:var(--text-primary);">📕 TOEFL</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">托福考试 · ~7000词</div>
+                    </div>
+                    <div class="lib-card" data-url="assets/words_ielts.json" data-name="雅思词汇" style="background:var(--bg-secondary);border-radius:var(--radius-sm);padding:12px;cursor:pointer;border:1px solid var(--border-color);transition:var(--transition);">
+                        <div style="font-weight:600;font-size:14px;color:var(--text-primary);">📗 IELTS</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">雅思考试 · ~5040词</div>
+                    </div>
+                    <div class="lib-card" data-url="assets/words_gre.json" data-name="GRE词汇" style="background:var(--bg-secondary);border-radius:var(--radius-sm);padding:12px;cursor:pointer;border:1px solid var(--border-color);transition:var(--transition);">
+                        <div style="font-weight:600;font-size:14px;color:var(--text-primary);">📘 GRE</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">美国研究生入学 · ~7500词</div>
+                    </div>
+                    <div class="lib-card" data-url="assets/words_gk.json" data-name="高考词汇" style="background:var(--bg-secondary);border-radius:var(--radius-sm);padding:12px;cursor:pointer;border:1px solid var(--border-color);transition:var(--transition);">
+                        <div style="font-weight:600;font-size:14px;color:var(--text-primary);">📙 高考</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">普通高考 · ~3677词</div>
+                    </div>
+                    <div class="lib-card" data-url="assets/words_zk.json" data-name="中考词汇" style="background:var(--bg-secondary);border-radius:var(--radius-sm);padding:12px;cursor:pointer;border:1px solid var(--border-color);transition:var(--transition);">
+                        <div style="font-weight:600;font-size:14px;color:var(--text-primary);">📗 中考</div>
+                        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">中考词汇 · ~1600词</div>
+                    </div>
+                </div>
+                <div id="onlineLibResult" style="font-size:13px;color:var(--text-muted);"></div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:8px;border-top:1px solid var(--border-color);padding-top:8px;">
+                    💡 这些词库已内置在项目中，点击即可加载到当前词书管理<br>
+                    另外也可从 <a href="https://github.com/skywind3000/ECDICT" target="_blank" style="color:var(--accent-blue);">ECDICT 开源词库</a> 下载更多词库（MIT 协议）
+                </div>
+            </div>
+
             <!-- 局域网访问 -->
             <div class="settings-section">
                 <h3>🌐 局域网访问</h3>
@@ -280,6 +351,100 @@ class SettingsPage {
             await WordDB.saveSetting('reminder_time', e.target.value);
             await WordDB.saveSetting('reminder_last_sent', '');
             window.Toast.show(`⏰ 提醒时间已设为 ${e.target.value}`);
+        });
+
+        // ====== 学习进度备份/恢复 ======
+
+        // 导出全部进度
+        document.getElementById('exportProgressBtn').addEventListener('click', async () => {
+            try {
+                const json = await WordParser.exportFullProgress();
+                const date = new Date().toISOString().slice(0, 10);
+                this._downloadFile(json, `wordwiz_backup_${date}.json`, 'application/json');
+                window.Toast.show('💾 学习进度备份已导出');
+            } catch (err) {
+                window.Toast.show('❌ 导出失败：' + err.message);
+            }
+        });
+
+        // 导入进度备份
+        document.getElementById('importProgressBtn').addEventListener('click', () => {
+            document.getElementById('importProgressInput').click();
+        });
+
+        document.getElementById('importProgressInput').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const resultEl = document.getElementById('progressResult');
+            resultEl.innerHTML = '<div style="color:var(--text-muted)">⏳ 正在导入备份，请稍候...</div>';
+
+            try {
+                const text = await file.text();
+                const result = await WordParser.importFullProgress(text);
+
+                if (result.success) {
+                    const details = result.details;
+                    let html = '<div style="color:var(--accent-green);padding:8px 0;">✅ ' + result.message + '</div>';
+                    html += '<div style="font-size:12px;color:var(--text-secondary);">';
+                    html += `📚 词书：${details.booksImported} 本 | 📝 单词：${details.wordsImported} 个`;
+                    if (details.settingsImported > 0) html += ` | ⚙️ 设置：${details.settingsImported} 项`;
+                    if (details.statsImported > 0) html += ` | 📊 统计：${details.statsImported} 条`;
+                    html += '</div>';
+                    resultEl.innerHTML = html;
+
+                    // 刷新统计和词书管理
+                    await StatsHelper.renderDashboard(dashboardContainer);
+                    await this._renderBookManagement(container);
+                    window.Toast.show('✅ 进度恢复成功！');
+                } else {
+                    resultEl.innerHTML = '<div style="color:var(--accent-red);">❌ ' + result.message + '</div>';
+                }
+            } catch (err) {
+                resultEl.innerHTML = '<div style="color:var(--accent-red);">❌ 导入失败：' + err.message + '</div>';
+            }
+
+            e.target.value = '';
+        });
+
+        // ====== 在线词库下载 ======
+
+        document.querySelectorAll('.lib-card').forEach(card => {
+            card.addEventListener('click', async () => {
+                const url = card.dataset.url;
+                const name = card.dataset.name;
+                const resultEl = document.getElementById('onlineLibResult');
+
+                card.style.opacity = '0.5';
+                resultEl.innerHTML = `<span>⏳ 正在加载「${name}」...</span>`;
+
+                try {
+                    const response = await fetch(url);
+                    const text = await response.text();
+                    const result = await WordParser.parseJSON(text, {
+                        onDuplicate: 'skip',
+                        bookSource: name
+                    });
+
+                    let html = '';
+                    if (result.success > 0) {
+                        html += `<span style="color:var(--accent-green);">✅ 「${name}」已加载：成功 ${result.success} 个单词</span>`;
+                        if (result.multiTagged > 0) {
+                            html += `<br><span style="font-size:12px;color:var(--text-muted);">🏷️ ${result.multiTagged} 个单词已追加到多词书归属</span>`;
+                        }
+                        // 刷新统计和词书管理
+                        await StatsHelper.renderDashboard(dashboardContainer);
+                        await this._renderBookManagement(container);
+                    } else {
+                        html += `<span style="color:var(--text-muted);">⚠️ 「${name}」中的单词已全部存在，无需重复加载</span>`;
+                    }
+                    resultEl.innerHTML = html;
+                } catch (err) {
+                    resultEl.innerHTML = `<span style="color:var(--accent-red);">❌ 加载失败：${err.message}</span>`;
+                }
+
+                card.style.opacity = '1';
+            });
         });
     }
 

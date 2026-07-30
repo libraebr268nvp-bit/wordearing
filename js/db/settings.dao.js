@@ -35,4 +35,13 @@ WordDatabase.prototype.getSetting = async function(key, defaultValue = null) {
     });
 };
 
-console.log('[WordWiz DAO] settings.dao.js 已加载 — 2 个设置方法已挂载');
+/**
+ * 获取所有设置
+ * @returns {Promise<Array<{key: string, value: any}>>}
+ */
+WordDatabase.prototype.getAllSettings = async function() {
+    const all = await this._getAll('settings');
+    return all.map(s => ({ key: s.key, value: s.value }));
+};
+
+console.log('[WordWiz DAO] settings.dao.js 已加载 — 3 个设置方法已挂载');

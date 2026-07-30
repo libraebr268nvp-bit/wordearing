@@ -12,7 +12,7 @@ echo [信息] 局域网访问: http://你的IP:3000 (手机同WiFi可用)
 echo [信息] 按 Ctrl+C 停止服务
 echo.
 
-npx http-server d:\gxj\code\wordlearing -p 3000 -c-1 --cors
+npx http-server . -p 3000 -c-1 --cors
 
 echo.
 pause
