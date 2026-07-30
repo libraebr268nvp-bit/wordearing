@@ -15,11 +15,16 @@
  */
 
 class ChallengePage {
-    /** 冷却天数 */
+    /** 冷却天数（可用 challenge_config 覆盖） */
+    static DEFAULT_COOLDOWN_DAYS = 7;
+    /** 每题限时（秒）（可用 challenge_config 覆盖） */
+    static DEFAULT_PER_QUESTION_TIMEOUT = 10;
+    /** 生命值模式初始命数（可用 challenge_config 覆盖） */
+    static DEFAULT_LIVES = 3;
+
+    // 运行时实际使用的值（初始与默认值相同，可由配置覆盖）
     static COOLDOWN_DAYS = 7;
-    /** 每题限时（秒） */
     static PER_QUESTION_TIMEOUT = 10;
-    /** 生命值模式初始命数 */
     static LIVES = 3;
 
     static _cleanupTimers() {
@@ -34,6 +39,12 @@ class ChallengePage {
     }
 
     static async render(container) {
+        // 加载动态配置（覆盖默认静态常量）
+        const saved = await WordDB.getSetting('challenge_config', {});
+        if (saved.cooldownDays !== undefined) this.COOLDOWN_DAYS = saved.cooldownDays;
+        if (saved.perQuestionTimeout !== undefined) this.PER_QUESTION_TIMEOUT = saved.perQuestionTimeout;
+        if (saved.lives !== undefined) this.LIVES = saved.lives;
+
         this._cleanupTimers();
         await this._cleanRecentWords();
 
@@ -168,7 +179,7 @@ class ChallengePage {
         const categories = [...new Set(allWords.map(w => w.category).filter(Boolean))].sort();
         const settings = await WordDB.getSetting('challenge_settings', {
             count: 10, rangeType: 'active', category: null,
-            mode: 'choice', difficulty: 'normal', lives: false, timed: false
+            mode: 'choice-cn', difficulty: 'normal', lives: false, timed: false
         });
 
         container.innerHTML = `
@@ -184,9 +195,10 @@ class ChallengePage {
                     <div class="challenge-setting-row">
                         <span class="setting-label">模式</span>
                         <div class="challenge-option-group" id="modeOptions">
-                            <button class="challenge-opt-btn ${settings.mode === 'choice' ? 'active' : ''}" data-value="choice">📋 四选一</button>
-                            <button class="challenge-opt-btn ${settings.mode === 'spelling-en' ? 'active' : ''}" data-value="spelling-en">✍️ 汉→英拼写</button>
-                            <button class="challenge-opt-btn ${settings.mode === 'spelling-cn' ? 'active' : ''}" data-value="spelling-cn">✍️ 英→汉拼写</button>
+                            <button class="challenge-opt-btn ${settings.mode === 'choice-cn' ? 'active' : ''}" data-value="choice-cn">📋 看英文选中文</button>
+                            <button class="challenge-opt-btn ${settings.mode === 'choice-en' ? 'active' : ''}" data-value="choice-en">📋 看中文选英文</button>
+                            <button class="challenge-opt-btn ${settings.mode === 'spelling-en' ? 'active' : ''}" data-value="spelling-en">✍️ 逐格拼写</button>
+                            <button class="challenge-opt-btn ${settings.mode === 'matching' ? 'active' : ''}" data-value="matching">🃏 配对</button>
                         </div>
                     </div>
 
@@ -197,11 +209,11 @@ class ChallengePage {
                             ${[10, 20, 50, 100].map(n => `
                                 <button class="challenge-opt-btn ${settings.count === n ? 'active' : ''}" data-value="${n}">${n}</button>
                             `).join('')}
-                            <button class="challenge-opt-btn ${![10,20,50,100].includes(settings.count) ? 'active' : ''}" data-value="custom">自定义</button>
+                            <button class="challenge-opt-btn ${![10, 20, 50, 100].includes(settings.count) ? 'active' : ''}" data-value="custom">自定义</button>
                         </div>
                     </div>
-                    <div id="customCountRow" style="display:${![10,20,50,100].includes(settings.count) ? 'flex' : 'none'};align-items:center;gap:8px;margin-top:4px;padding-left:48px;">
-                        <input type="number" id="customCountInput" min="1" max="200" value="${![10,20,50,100].includes(settings.count) ? settings.count : 10}"
+                    <div id="customCountRow" style="display:${![10, 20, 50, 100].includes(settings.count) ? 'flex' : 'none'};align-items:center;gap:8px;margin-top:4px;padding-left:48px;">
+                        <input type="number" id="customCountInput" min="1" max="200" value="${![10, 20, 50, 100].includes(settings.count) ? settings.count : 10}"
                                style="width:80px;padding:4px 8px;border:1px solid var(--border-color);border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary);font-size:13px;">
                         <span style="color:var(--text-muted);font-size:12px;">题（1~200）</span>
                     </div>
@@ -241,15 +253,25 @@ class ChallengePage {
                     <!-- 附加模式 -->
                     <div class="challenge-setting-row">
                         <span class="setting-label">附加</span>
-                        <div style="display:flex;gap:16px;flex-wrap:wrap;">
+                        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
                             <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
                                 <input type="checkbox" id="livesMode" ${settings.lives ? 'checked' : ''}>
-                                ❤️ 生命值（3 条命）
+                                ❤️ 生命值
                             </label>
+                            <select id="livesCountSelect" style="padding:4px 6px;border:1px solid var(--border-color);border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary);font-size:12px;width:60px;">
+                                ${[1, 3, 5, 10].map(n => `
+                                    <option value="${n}" ${(settings.livesCount || this.LIVES) === n ? 'selected' : ''}>${n}条</option>
+                                `).join('')}
+                            </select>
                             <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
                                 <input type="checkbox" id="timedMode" ${settings.timed ? 'checked' : ''}>
-                                ⏱ 限时（每题 ${this.PER_QUESTION_TIMEOUT} 秒）
+                                ⏱ 限时
                             </label>
+                            <select id="timedSecondsSelect" style="padding:4px 6px;border:1px solid var(--border-color);border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary);font-size:12px;width:70px;">
+                                ${[5, 10, 15, 20, 30].map(n => `
+                                    <option value="${n}" ${(settings.timedSeconds || this.PER_QUESTION_TIMEOUT) === n ? 'selected' : ''}>${n}秒</option>
+                                `).join('')}
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -297,11 +319,12 @@ class ChallengePage {
 
     static _getModeDesc(mode) {
         const map = {
-            'choice': '选择正确的中文释义，每题 4 选 1',
-            'spelling-en': '看中文释义，输入对应的英文单词',
-            'spelling-cn': '看英文单词，输入对应的中文释义'
+            'choice-cn': '看英文单词，选择正确的中文释义，每题 4 选 1',
+            'choice-en': '看中文释义，选择正确的英文单词，每题 4 选 1',
+            'spelling-en': '看中文释义，逐格填充拼出对应的英文单词',
+            'matching': '翻牌配对游戏，匹配单词与释义'
         };
-        return map[mode] || '选择正确的中文释义，每题 4 选 1';
+        return map[mode] || '看英文单词，选择正确的中文释义，每题 4 选 1';
     }
 
     // ===================== 开始游戏 =====================
@@ -316,7 +339,7 @@ class ChallengePage {
         try {
             // 读取设置
             const activeModeBtn = container.querySelector('#modeOptions .challenge-opt-btn.active');
-            const mode = activeModeBtn ? activeModeBtn.dataset.value : 'choice';
+            const mode = activeModeBtn ? activeModeBtn.dataset.value : 'choice-cn';
 
             const activeCountBtn = container.querySelector('#countOptions .challenge-opt-btn.active');
             let count;
@@ -341,16 +364,32 @@ class ChallengePage {
             const lives = document.getElementById('livesMode').checked;
             const timed = document.getElementById('timedMode').checked;
 
+            // 读取自定义生命值/限时秒数
+            const livesCountEl = document.getElementById('livesCountSelect');
+            const timedSecondsEl = document.getElementById('timedSecondsSelect');
+            if (lives && livesCountEl) this.LIVES = parseInt(livesCountEl.value) || this.LIVES;
+            if (timed && timedSecondsEl) this.PER_QUESTION_TIMEOUT = parseInt(timedSecondsEl.value) || this.PER_QUESTION_TIMEOUT;
+
             // 保存设置
             await WordDB.saveSetting('challenge_settings', {
-                count, rangeType, category, mode, difficulty, lives, timed
+                count, rangeType, category, mode, difficulty, lives, timed,
+                livesCount: this.LIVES,
+                timedSeconds: this.PER_QUESTION_TIMEOUT
             });
+
+            // 配对模式：跳转到配对页面
+            if (mode === 'matching') {
+                await MatchingPage.render(container);
+                return;
+            }
 
             // 获取可用词库
             const pool = await this._getAvailablePool(category, rangeType, difficulty);
 
+            const isChoiceMode = mode === 'choice-cn' || mode === 'choice-en';
+
             // 检查词库
-            const minPool = mode === 'choice' ? 4 : 2;
+            const minPool = isChoiceMode ? 4 : 2;
             if (pool.length < minPool) {
                 this._showError(container, `可用单词不足 ${minPool} 个（当前 ${pool.length} 个）。冷却中的词 7 天后可再次挑战。`);
                 return;
@@ -369,8 +408,8 @@ class ChallengePage {
             const questions = shuffled.slice(0, count);
 
             // 生成题目
-            const quiz = mode === 'choice'
-                ? questions.map(q => this._buildChoiceQuestion(q, pool))
+            const quiz = isChoiceMode
+                ? questions.map(q => this._buildChoiceQuestion(q, pool, mode))
                 : questions.map(q => this._buildSpellingQuestion(q, mode));
 
             // 进入答题
@@ -414,12 +453,16 @@ class ChallengePage {
     // ===================== 题目构建 =====================
 
     /** 构建四选一题目 */
-    static _buildChoiceQuestion(correctWord, pool) {
-        const correctDef = correctWord.definition || '(无释义)';
+    static _buildChoiceQuestion(correctWord, pool, direction) {
+        const isCnMode = direction === 'choice-cn';
+        // choice-cn：显示英文单词，选项是中文释义
+        // choice-en：显示中文释义，选项是英文单词
+        const correctDisplay = isCnMode
+            ? (correctWord.definition || '(无释义)')
+            : correctWord.word.trim();
+
         const distractors = new Set();
-        const filtered = pool.filter(w =>
-            w.id !== correctWord.id && w.definition && w.definition !== correctDef
-        );
+        const filtered = pool.filter(w => w.id !== correctWord.id && w.definition);
         const candidates = [...filtered];
         for (let i = candidates.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
@@ -427,12 +470,13 @@ class ChallengePage {
         }
         for (const c of candidates) {
             if (distractors.size >= 3) break;
-            distractors.add(c.definition);
+            const val = isCnMode ? (c.definition || '(无释义)') : c.word.trim();
+            if (val !== correctDisplay) distractors.add(val);
         }
         const distractorList = [...distractors];
         while (distractorList.length < 3) distractorList.push('(错误选项)');
 
-        const options = [correctDef, ...distractorList];
+        const options = [correctDisplay, ...distractorList];
         for (let i = options.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [options[i], options[j]] = [options[j], options[i]];
@@ -441,27 +485,34 @@ class ChallengePage {
         return {
             type: 'choice',
             word: correctWord,
-            correctDef,
+            isCnMode,
+            prompt: isCnMode ? correctWord.word : (correctWord.definition || '(无释义)'),
+            correctDisplay,
             options,
-            correctIndex: options.indexOf(correctDef)
+            correctIndex: options.indexOf(correctDisplay)
         };
     }
 
     /** 构建拼写题目 */
     static _buildSpellingQuestion(word, mode) {
         const isEnToCn = mode === 'spelling-cn';
+        const correctAnswer = isEnToCn ? (word.definition || '').trim() : word.word.trim();
         return {
             type: 'spelling',
             mode: mode,
             word: word,
-            // 汉→英：显示 definition，正确答案是 word.word
-            // 英→汉：显示 word.word，正确答案是 definition
+            // 汉→英：显示 definition，正确答案是 word.word（逐格）
+            // 英→汉：显示 word.word，正确答案是 definition（单输入框）
             prompt: isEnToCn ? word.word : (word.definition || '(无释义)'),
-            correctAnswer: isEnToCn ? (word.definition || '').trim() : word.word.trim(),
+            correctAnswer: correctAnswer,
+            // 逐格拼写模式：将正确答案拆成字母数组
+            letters: isEnToCn ? null : correctAnswer.split(''),
             // 提示：汉→英显示首字母+下划线；英→汉显示首字
             hint: isEnToCn
                 ? word.word.charAt(0) + '_'.repeat(Math.max(0, word.word.length - 1))
-                : ((word.definition || '').charAt(0) || '') + '...'
+                : ((word.definition || '').charAt(0) || '') + '...',
+            maxHints: 2,
+            hintsUsed: 0
         };
     }
 
@@ -470,6 +521,7 @@ class ChallengePage {
     static _renderQuestion(container) {
         if (this._isFinished) return;
         this._timeoutFired = false;
+        this._answerSubmitted = false;
 
         const q = this._currentQuiz[this._currentIndex];
         const total = this._currentQuiz.length;
@@ -477,9 +529,12 @@ class ChallengePage {
         const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
         const seconds = String(elapsed % 60).padStart(2, '0');
 
-        // 生命值显示
+        // 生命值显示（每个❤用.heart-icon包裹，供裂开动画定位）
         const livesHtml = this._hasLivesMode
-            ? '<span style="font-size:14px;">' + '❤️'.repeat(Math.max(0, this._lives)) + '🖤'.repeat(Math.max(0, this.LIVES - this._lives)) + '</span>'
+            ? '<span style="font-size:14px;">' 
+                + '<span class="heart-icon">❤️</span>'.repeat(Math.max(0, this._lives)) 
+                + '🖤'.repeat(Math.max(0, this.LIVES - this._lives)) 
+              + '</span>'
             : '';
 
         // 限时模式倒计时
@@ -514,8 +569,11 @@ class ChallengePage {
                 </div>
 
                 <div style="text-align:center;margin-bottom:32px;">
+                    <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">
+                        ${q.isCnMode ? '请选择正确的中文释义' : '请选择正确的英文单词'}
+                    </div>
                     <div style="font-size:36px;font-weight:700;color:var(--text-primary);letter-spacing:1px;margin-bottom:8px;">
-                        ${q.word.word}
+                        ${q.prompt}
                     </div>
                     <div style="font-size:13px;color:var(--text-muted);">
                         ${q.word.category || ''} ${q.word.book_source ? '· ' + q.word.book_source : ''}
@@ -551,6 +609,8 @@ class ChallengePage {
     /** 拼写问题 UI */
     static _renderSpellingQuestion(container, q, total, elapsed, minutes, seconds, livesHtml, timedHtml) {
         const isEnToCn = q.mode === 'spelling-cn';
+        const hintsRemaining = q.maxHints - q.hintsUsed;
+        const hasLetterBoxes = !isEnToCn && q.letters && q.letters.length > 0;
 
         container.innerHTML = `
             <div class="challenge-quiz" style="max-width:600px;margin:0 auto;padding:20px;">
@@ -573,7 +633,7 @@ class ChallengePage {
 
                 <div style="text-align:center;margin-bottom:20px;">
                     <div style="font-size:14px;color:var(--text-muted);margin-bottom:8px;">
-                        ${isEnToCn ? '请输入中文释义' : '请输入英文单词'}
+                        ${isEnToCn ? '请输入中文释义' : '逐格输入英文单词'}
                     </div>
                     <div style="font-size:32px;font-weight:700;color:var(--text-primary);letter-spacing:1px;margin-bottom:12px;">
                         ${q.prompt}
@@ -591,14 +651,29 @@ class ChallengePage {
 
                 <!-- 输入区 -->
                 <div style="text-align:center;margin-bottom:20px;">
-                    <input type="text" id="spellingInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
-                           placeholder="${isEnToCn ? '输入中文释义...' : '输入英文单词...'}"
-                           style="width:80%;max-width:360px;padding:14px 18px;border:2px solid var(--border-color);border-radius:var(--radius-md);
-                                  background:var(--bg-secondary);color:var(--text-primary);font-size:18px;text-align:center;outline:none;
-                                  transition:var(--transition);">
-                    <div style="margin-top:12px;display:flex;gap:10px;justify-content:center;">
+                    ${hasLetterBoxes ? `
+                        <div id="letterBoxContainer" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:12px;">
+                            ${q.letters.map((_, i) => `
+                                <input type="text" class="letter-input" data-index="${i}" maxlength="1"
+                                       autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                                       style="width:36px;height:44px;padding:4px;border:2px solid var(--border-color);border-radius:var(--radius-sm);
+                                              background:var(--bg-secondary);color:var(--text-primary);font-size:20px;text-align:center;outline:none;
+                                              text-transform:lowercase;transition:var(--transition);">
+                            `).join('')}
+                        </div>
+                    ` : `
+                        <input type="text" id="spellingInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                               placeholder="输入中文释义..."
+                               style="width:80%;max-width:360px;padding:14px 18px;border:2px solid var(--border-color);border-radius:var(--radius-md);
+                                      background:var(--bg-secondary);color:var(--text-primary);font-size:18px;text-align:center;outline:none;
+                                      transition:var(--transition);">
+                    `}
+                    <div style="margin-top:12px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
                         <button class="btn btn-primary" id="spellingSubmitBtn" style="font-size:15px;padding:10px 28px;">↵ 确认</button>
                         <button class="btn btn-sm" id="spellingSkipBtn" style="font-size:13px;">跳过 →</button>
+                        <button class="btn btn-sm" id="spellingHintBtn" style="font-size:13px;" ${hintsRemaining <= 0 ? 'disabled' : ''}>
+                            💡 提示 (${hintsRemaining})
+                        </button>
                     </div>
                 </div>
 
@@ -608,15 +683,94 @@ class ChallengePage {
 
         this._startTimers(container);
 
-        // 回车提交
-        const input = document.getElementById('spellingInput');
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') this._handleSpellingAnswer(container);
-        });
+        if (hasLetterBoxes) {
+            // 逐格输入：绑定键盘导航
+            const boxes = container.querySelectorAll('.letter-input');
+            boxes.forEach((box, idx) => {
+                box.addEventListener('input', (e) => {
+                    const val = e.target.value.toLowerCase();
+                    e.target.value = val.replace(/[^a-zA-Z'-]/g, '').toLowerCase();
+                    if (e.target.value && idx < boxes.length - 1) {
+                        boxes[idx + 1].focus();
+                    }
+                });
+                box.addEventListener('keydown', (e) => {
+                    if (e.key === 'Backspace' && !e.target.value && idx > 0) {
+                        boxes[idx - 1].focus();
+                    }
+                    if (e.key === 'Enter') {
+                        this._handleSpellingAnswer(container);
+                    }
+                });
+            });
+            // 第一个格子获得焦点
+            setTimeout(() => { if (boxes[0]) boxes[0].focus(); }, 100);
+        } else {
+            // 中文输入：单输入框
+            const input = document.getElementById('spellingInput');
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') this._handleSpellingAnswer(container);
+            });
+            setTimeout(() => input.focus(), 100);
+        }
+
         document.getElementById('spellingSubmitBtn').addEventListener('click', () => this._handleSpellingAnswer(container));
         document.getElementById('spellingSkipBtn').addEventListener('click', () => this._handleSpellingSkip(container));
+        const hintBtn = document.getElementById('spellingHintBtn');
+        if (hintBtn) {
+            hintBtn.addEventListener('click', () => this._useSpellingHint(container));
+        }
+    }
 
-        setTimeout(() => input.focus(), 100);
+    /** 使用拼写提示：在逐格/输入框中填充下一个字符 */
+    static _useSpellingHint(container) {
+        const q = this._currentQuiz[this._currentIndex];
+        if (this._answerSubmitted || q.hintsUsed >= q.maxHints) return;
+
+        q.hintsUsed++;
+
+        // 逐格模式
+        const boxes = container.querySelectorAll('.letter-input');
+        if (boxes.length > 0) {
+            let nextIdx = -1;
+            for (let i = 0; i < boxes.length; i++) {
+                if (!boxes[i].value) { nextIdx = i; break; }
+            }
+            if (nextIdx >= 0 && nextIdx < q.letters.length) {
+                boxes[nextIdx].value = q.letters[nextIdx].toLowerCase();
+                if (nextIdx < boxes.length - 1) boxes[nextIdx + 1].focus();
+                else boxes[nextIdx].focus();
+            }
+        } else {
+            // 单输入框模式
+            const input = document.getElementById('spellingInput');
+            if (!input) return;
+            const correct = q.correctAnswer;
+            const currentVal = input.value;
+            let nextChar = '';
+            for (let i = 0; i < correct.length; i++) {
+                if (i >= currentVal.length || currentVal[i] !== correct[i]) {
+                    nextChar = correct[i];
+                    break;
+                }
+            }
+            if (nextChar) {
+                input.value = currentVal + nextChar;
+                input.focus();
+            }
+        }
+
+        // 更新提示按钮文本
+        const hintBtn = document.getElementById('spellingHintBtn');
+        const hintsRemaining = q.maxHints - q.hintsUsed;
+        if (hintBtn) {
+            if (hintsRemaining <= 0) {
+                hintBtn.disabled = true;
+                hintBtn.textContent = '💡 提示 (0)';
+            } else {
+                hintBtn.textContent = `💡 提示 (${hintsRemaining})`;
+            }
+        }
     }
 
     /** 启动总计时 + 每題计时 */
@@ -672,16 +826,21 @@ class ChallengePage {
                 btn.style.borderColor = 'var(--accent-green)';
                 btn.style.background = 'rgba(74, 222, 128, 0.1)';
                 btn.style.boxShadow = '0 0 12px rgba(74, 222, 128, 0.2)';
+                if (isCorrect) btn.classList.add('correct-flash');
             } else if (idx === selectedIndex && !isCorrect) {
                 btn.style.borderColor = 'var(--accent-red)';
                 btn.style.background = 'rgba(255, 82, 82, 0.1)';
                 btn.style.boxShadow = '0 0 12px rgba(255, 82, 82, 0.2)';
+                btn.classList.add('wrong-shake');
             }
         });
 
         clickedBtn.innerHTML += isCorrect
             ? ' <span style="margin-left:auto;font-size:18px;">✅</span>'
             : ' <span style="margin-left:auto;font-size:18px;">❌</span>';
+
+        // 心碎飘出
+        if (!isCorrect) this._showHeartBreakEffect(container);
 
         // 更新熟悉度（_updateFamiliarity 内部已处理 correctCount/错误记录/生命值）
         await this._updateFamiliarity(q.word, isCorrect);
@@ -691,13 +850,45 @@ class ChallengePage {
 
     // ===================== 拼写答题处理 =====================
 
+    /** 获取拼写用户答案（逐格拼接 or 单输入框） */
+    static _getSpellingUserAnswer(container) {
+        const boxes = container.querySelectorAll('.letter-input');
+        if (boxes.length > 0) {
+            return Array.from(boxes).map(b => b.value).join('').trim();
+        }
+        const input = document.getElementById('spellingInput');
+        return input ? input.value.trim() : '';
+    }
+
+    /** 禁用拼写所有输入 */
+    static _disableSpellingInputs(container) {
+        container.querySelectorAll('.letter-input').forEach(b => b.disabled = true);
+        const input = document.getElementById('spellingInput');
+        if (input) input.disabled = true;
+        document.getElementById('spellingSubmitBtn').disabled = true;
+        document.getElementById('spellingSkipBtn').disabled = true;
+    }
+
+    /** 对所有拼写输入框添加样式 */
+    static _applySpellingStyle(container, isCorrect) {
+        const boxes = container.querySelectorAll('.letter-input');
+        const input = document.getElementById('spellingInput');
+        const color = isCorrect ? 'var(--accent-green)' : 'var(--accent-red)';
+        const cls = isCorrect ? 'correct-flash' : 'wrong-shake';
+        if (boxes.length > 0) {
+            boxes.forEach(b => { b.style.borderColor = color; b.classList.add(cls); });
+        } else if (input) {
+            input.style.borderColor = color;
+            input.classList.add(cls);
+        }
+    }
+
     static async _handleSpellingAnswer(container) {
         if (this._answerSubmitted) return;
-        const input = document.getElementById('spellingInput');
         const feedback = document.getElementById('spellingFeedback');
         const q = this._currentQuiz[this._currentIndex];
 
-        const userAnswer = input.value.trim();
+        const userAnswer = this._getSpellingUserAnswer(container);
         if (!userAnswer) {
             feedback.textContent = '⚠️ 请输入答案';
             feedback.style.color = 'var(--accent-yellow)';
@@ -705,28 +896,22 @@ class ChallengePage {
         }
         this._answerSubmitted = true;
 
-
         // 忽略大小写比较（英文拼写）
         const isCorrect = q.mode === 'spelling-cn'
             ? userAnswer === q.correctAnswer
             : userAnswer.toLowerCase() === q.correctAnswer.toLowerCase();
 
-        input.disabled = true;
-        document.getElementById('spellingSubmitBtn').disabled = true;
-        document.getElementById('spellingSkipBtn').disabled = true;
-
+        this._disableSpellingInputs(container);
         await this._updateFamiliarity(q.word, isCorrect);
 
+        this._applySpellingStyle(container, isCorrect);
+
         if (isCorrect) {
-            input.style.borderColor = 'var(--accent-green)';
             feedback.textContent = '✅ 正确！';
             feedback.style.color = 'var(--accent-green)';
         } else {
-            input.style.borderColor = 'var(--accent-red)';
-            // 英文拼写：显示正确拼写（颜色区分大小写）
-            const displayCorrect = q.mode === 'spelling-cn'
-                ? q.correctAnswer
-                : q.word.word;
+            this._showHeartBreakEffect(container);
+            const displayCorrect = q.mode === 'spelling-cn' ? q.correctAnswer : q.word.word;
             feedback.innerHTML = '❌ 正确答案：<strong style="color:var(--accent-green);">' + displayCorrect + '</strong>';
             feedback.style.color = 'var(--accent-red)';
         }
@@ -737,18 +922,14 @@ class ChallengePage {
     static async _handleSpellingSkip(container) {
         if (this._answerSubmitted) return;
         this._answerSubmitted = true;
-        const input = document.getElementById('spellingInput');
 
         const feedback = document.getElementById('spellingFeedback');
         const q = this._currentQuiz[this._currentIndex];
 
-        input.disabled = true;
-        document.getElementById('spellingSubmitBtn').disabled = true;
-        document.getElementById('spellingSkipBtn').disabled = true;
+        this._disableSpellingInputs(container);
 
-        // 跳过＝答错
         await this._updateFamiliarity(q.word, false);
-
+        this._showHeartBreakEffect(container);
         const displayCorrect = q.mode === 'spelling-cn' ? q.correctAnswer : q.word.word;
         feedback.innerHTML = '⏭ 正确答案：<strong style="color:var(--accent-green);">' + displayCorrect + '</strong>';
         feedback.style.color = 'var(--accent-red)';
@@ -776,25 +957,18 @@ class ChallengePage {
                 }
             });
         } else {
-            const input = document.getElementById('spellingInput');
-            if (input) {
-                input.disabled = true;
-                input.style.borderColor = 'var(--accent-red)';
-            }
+            this._disableSpellingInputs(container);
+            this._applySpellingStyle(container, false);
             const feedback = document.getElementById('spellingFeedback');
             if (feedback) {
                 const displayCorrect = q.mode === 'spelling-cn' ? q.correctAnswer : q.word.word;
                 feedback.innerHTML = '⏰ 超时！正确答案：<strong style="color:var(--accent-green);">' + displayCorrect + '</strong>';
                 feedback.style.color = 'var(--accent-red)';
             }
-            const submitBtn = document.getElementById('spellingSubmitBtn');
-            if (submitBtn) submitBtn.disabled = true;
-            const skipBtn = document.getElementById('spellingSkipBtn');
-            if (skipBtn) skipBtn.disabled = true;
         }
 
-        // 超时当作答错 — 更新熟悉度（_updateFamiliarity 内部已处理错误记录/生命值）
         await this._updateFamiliarity(q.word, false);
+        this._showHeartBreakEffect(container);
 
         this._advanceAfterDelay(container, 1200);
     }
@@ -812,17 +986,71 @@ class ChallengePage {
                 this._correctCount++;
                 this._streakCount++;
                 if (this._streakCount > this._maxStreak) this._maxStreak = this._streakCount;
+
+                // 连击弹窗
+                if (this._streakCount >= 2) {
+                    this._showComboPopup(this._streakCount);
+                }
             } else {
                 await WordDB.updateWord(word.id, {
                     familiarity: Math.max(0, (word.familiarity || 0) - 1)
                 });
                 this._wrongIndices.push(this._currentIndex);
                 this._streakCount = 0;
-                if (this._hasLivesMode && !this._timeoutFired) this._lives--;
+                if (this._hasLivesMode) {
+                    this._lives--;
+                    // 爱心裂开动画：找到当前第 _lives 个 ❤️（扣之前的 _lives+1）
+                    this._animateHeartBreak();
+                }
             }
         } catch (e) {
             console.warn('[Challenge] 更新熟悉度失败:', e);
         }
+    }
+
+    /** 爱心裂开动画 */
+    static _animateHeartBreak() {
+        const livesSpan = document.querySelector('#challengeContent .challenge-progress span');
+        if (!livesSpan) return;
+        // 找到第 this._lives 个 ❤️（因为 _lives 已经减过 1 了）
+        const hearts = livesSpan.querySelectorAll('.heart-icon');
+        if (hearts.length > 0 && this._lives >= 0 && this._lives < hearts.length) {
+            hearts[this._lives].classList.add('heart-breaking');
+            // 动画结束后替换为 🖤
+            const target = hearts[this._lives];
+            target.addEventListener('animationend', () => {
+                target.textContent = '🖤';
+                target.classList.remove('heart-breaking');
+            }, { once: true });
+        }
+    }
+
+    /** 连击弹窗（不阻塞交互） */
+    static _showComboPopup(count) {
+        const el = document.createElement('div');
+        el.textContent = count >= 5 ? '⚡ ' + count + '连击！' : '🔥 ' + count + '连击！';
+        el.style.cssText = 'position:fixed;top:30%;left:50%;transform:translateX(-50%);font-size:28px;font-weight:700;z-index:999;pointer-events:none;animation:comboPop 1s ease forwards;';
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 1000);
+    }
+
+    /** 答错时生成心碎飘出 */
+    static _showHeartBreakEffect(container) {
+        const el = document.createElement('div');
+        el.textContent = '💔';
+        el.className = 'heart-float-up';
+        // 定位到答题区域中间
+        const quiz = container.querySelector('.challenge-quiz');
+        if (quiz) {
+            const rect = quiz.getBoundingClientRect();
+            el.style.left = (rect.left + rect.width / 2 - 12) + 'px';
+            el.style.top = (rect.top + 40) + 'px';
+        } else {
+            el.style.left = '50%';
+            el.style.top = '30%';
+        }
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 800);
     }
 
     /** @deprecated 不再使用 — _updateFamiliarity 已统一处理 */
@@ -976,18 +1204,18 @@ class ChallengePage {
             reviewEl.innerHTML = `
                 <div style="font-size:14px;font-weight:600;margin-bottom:12px;color:var(--accent-red);">📝 错题回顾</div>
                 ${wrongQs.map(q => {
-                    const word = q.word;
-                    const correctDisplay = q.type === 'spelling'
-                        ? (q.mode === 'spelling-cn' ? q.correctAnswer : word.word)
-                        : q.correctDef;
-                    return `
+                const word = q.word;
+                const correctDisplay = q.type === 'spelling'
+                    ? (q.mode === 'spelling-cn' ? q.correctAnswer : word.word)
+                    : q.correctDisplay;
+                return `
                         <div style="padding:10px 14px;background:var(--bg-secondary);border-radius:var(--radius-sm);margin-bottom:8px;
                             border-left:3px solid var(--accent-red);">
                             <div style="font-weight:600;font-size:14px;">${word.word}</div>
                             <div style="font-size:13px;color:var(--accent-green);margin-top:4px;">✅ ${correctDisplay}</div>
                         </div>
                     `;
-                }).join('')}
+            }).join('')}
             `;
         }
 

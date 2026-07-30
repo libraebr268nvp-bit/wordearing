@@ -42,20 +42,19 @@ class WordCard {
         const actions = document.createElement('div');
         actions.className = 'word-actions';
 
-        // 熟悉按钮
-        const famBtn = document.createElement('button');
-        famBtn.className = 'action-btn familiar';
-        famBtn.title = `熟悉度: ${WordModel.getFamiliarityLabel(word.familiarity)}`;
-        famBtn.textContent = '✓';
+        // 熟悉度5：显示已掌握标签，隐藏操作按钮
+        const isMastered = (word.familiarity || 0) >= 5;
+        
+        if (!isMastered) {
+            // 熟悉按钮
+            const famBtn = document.createElement('button');
+            famBtn.className = 'action-btn familiar';
+            famBtn.title = `熟悉度: ${WordModel.getFamiliarityLabel(word.familiarity)}`;
+            famBtn.textContent = '✓';
             famBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
-                if ((word.familiarity || 0) >= 5) {
-                    window.Toast.show('✅ 熟悉度已满，无需再学');
-                    return;
-                }
                 const updated = await WordDB.increaseFamiliarity(word.id);
                 if (updated) {
-                    // 更新熟悉度圆点
                     const newDots = row.querySelector('.familiarity-dots');
                     if (newDots) {
                         newDots.innerHTML = '';
@@ -67,14 +66,20 @@ class WordCard {
                     }
                     famBtn.title = `熟悉度: ${WordModel.getFamiliarityLabel(updated.familiarity)}`;
                     window.Toast.show(`✓ "${updated.word}" 熟悉度 +1`);
-                    // 成就：记录学习动作
                     await AchievementHelper.recordStudy();
-                    // 通知刷新统计
                     if (options.onUpdate) options.onUpdate();
                 }
             });
+            actions.appendChild(famBtn);
+        }
 
-        actions.appendChild(famBtn);
+        // 如果是已掌握（熟悉度5），在单词文本后加标签
+        if (isMastered) {
+            const masterTag = document.createElement('span');
+            masterTag.style.cssText = 'font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(167,139,250,0.15);color:var(--accent-purple);margin-left:6px;flex-shrink:0;';
+            masterTag.textContent = '🌟 已掌握';
+            row.insertBefore(masterTag, actions);
+        }
 
         // 收藏按钮
         const favBtn = document.createElement('button');

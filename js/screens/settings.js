@@ -182,6 +182,21 @@ class SettingsPage {
                 </div>
             </div>
 
+            <!-- 主题设置 -->
+            <div class="settings-section">
+                <h3>🎨 主题设置</h3>
+                <div class="setting-row">
+                    <div>
+                        <div class="setting-label">深色模式</div>
+                        <div class="setting-desc">切换深色/浅色主题</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="themeToggle" ${document.documentElement.getAttribute('data-theme') === 'dark' ? 'checked' : ''}>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+
             <!-- 关于 -->
             <div class="settings-section">
                 <h3>ℹ️ 关于</h3>
@@ -352,6 +367,20 @@ class SettingsPage {
             await WordDB.saveSetting('reminder_last_sent', '');
             window.Toast.show(`⏰ 提醒时间已设为 ${e.target.value}`);
         });
+
+        // ====== 主题切换 ======
+        const themeToggle = document.getElementById('themeToggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('change', (e) => {
+                const isDark = e.target.checked;
+                const theme = isDark ? 'dark' : 'light';
+                document.documentElement.setAttribute('data-theme', theme);
+                try {
+                    localStorage.setItem('wordwiz_theme', theme);
+                } catch (err) {}
+                window.Toast.show(isDark ? '🌙 已切换为深色主题' : '☀️ 已切换为浅色主题');
+            });
+        }
 
         // ====== 学习进度备份/恢复 ======
 

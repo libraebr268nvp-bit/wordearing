@@ -3,3 +3,6 @@ package-lock.json
 .DS_Store
 Thumbs.db
 *.log
+*.docx
+format_report.js
+docs.zip

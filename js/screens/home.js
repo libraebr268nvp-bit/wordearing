@@ -17,17 +17,25 @@
 
 class HomePage {
     static async render(container) {
+        // 读取视图模式偏好
+        const viewMode = AppState.home.viewMode || 'list';
+
         container.innerHTML = `
             <div class="page-header">
                 <div class="page-title">📚 学习</div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                    <div class="view-toggle">
+                        <button class="view-toggle-btn ${viewMode === 'list' ? 'active' : ''}" data-view="list" title="列表视图">📋</button>
+                        <button class="view-toggle-btn ${viewMode === 'flashcard' ? 'active' : ''}" data-view="flashcard" title="闪卡模式">🃏</button>
+                        <button class="view-toggle-btn ${viewMode === 'immersion' ? 'active' : ''}" data-view="immersion" title="沉浸模式">🎨</button>
+                    </div>
                     <button id="globalShuffleBtn" class="btn btn-sm btn-primary">
                         ${HomeShuffle.isShuffled() ? '🔁 恢复' : '🔀 全局混序'}
                     </button>
                 </div>
             </div>
-            <!-- 搜索框 -->
-            <div class="search-bar" style="padding:0 16px 12px;">
+            <!-- 搜索框（仅列表模式显示） -->
+            <div class="search-bar" style="padding:0 16px 12px;display:${viewMode === 'list' ? 'block' : 'none'};" id="searchBar">
                 <div style="position:relative;">
                     <input type="text" id="searchInput" placeholder="🔍 搜索单词..." 
                            style="width:100%;padding:10px 14px;border:1px solid var(--border-color);border-radius:var(--radius-md);
@@ -47,8 +55,27 @@ class HomePage {
         // 搜索功能
         this._setupSearch(container);
 
+        // 视图切换按钮
+        container.querySelectorAll('.view-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const mode = btn.dataset.view;
+                AppState.home.viewMode = mode;
+                container.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === mode));
+                // 搜索框仅在列表模式显示
+                const searchBar = container.querySelector('#searchBar');
+                if (searchBar) searchBar.style.display = mode === 'list' ? 'block' : 'none';
+                await this._renderUnits(container);
+            });
+        });
+
         // 词书筛选
         await this._renderBookFilter(container);
+
+        // Streak 连续学习天数提示
+        await this._renderStreakBanner(container);
+
+        // 每日一词
+        await this._renderDailyWord(container);
 
         // 今日复习提示条
         await this._renderDueBanner(container);
@@ -57,6 +84,23 @@ class HomePage {
         await CategoryFilter.render(container.querySelector('#categoryFilter'), AppState.home.category, async (category) => {
             AppState.home.category = category;
             this._resetShuffle();
+            await this._renderUnits(container);
+        });
+
+        // 隐藏已掌握按钮
+        const hideMastered = AppState.home.hideMastered || false;
+        const masteredFilter = document.createElement('div');
+        masteredFilter.style.cssText = 'display:flex;gap:8px;align-items:center;padding:0 16px 12px;';
+        masteredFilter.innerHTML = `
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
+                <input type="checkbox" id="hideMasteredCheck" ${hideMastered ? 'checked' : ''}>
+                🌟 隐藏已掌握
+            </label>
+        `;
+        const sortSelector = container.querySelector('#sortSelector');
+        container.insertBefore(masteredFilter, sortSelector);
+        masteredFilter.querySelector('#hideMasteredCheck').addEventListener('change', async (e) => {
+            AppState.home.hideMastered = e.target.checked;
             await this._renderUnits(container);
         });
 
@@ -311,12 +355,128 @@ class HomePage {
             return;
         }
 
-        const mode = AppState.home.sortMode || 'default';
-        if (mode === 'default') {
-            this._renderByUnit(unitsContainer, words);
-        } else {
-            this._renderFlatList(unitsContainer, words, mode);
+        const viewMode = AppState.home.viewMode || 'list';
+        const sortMode = AppState.home.sortMode || 'default';
+        const hideMastered = AppState.home.hideMastered || false;
+
+        // 过滤已掌握单词
+        let filtered = words;
+        if (hideMastered) {
+            filtered = words.filter(w => (w.familiarity || 0) < 5);
         }
+
+        let sorted = filtered;
+        if (sortMode !== 'default') {
+            if (sortMode === 'shuffled' && AppState.home.shuffledWords) {
+                sorted = WordSorter.sort(filtered, 'shuffled', AppState.home.shuffledWords);
+            } else {
+                sorted = WordSorter.sort(filtered, sortMode);
+            }
+        }
+
+        if (viewMode === 'flashcard') {
+            FlashcardViewer.render(unitsContainer, sorted, {
+                onUpdate: async () => {
+                    const allWords = await this._getAllWords();
+                    const resorted = sortMode !== 'default' ? WordSorter.sort(allWords, sortMode) : allWords;
+                    FlashcardViewer.render(unitsContainer, resorted);
+                }
+            });
+        } else if (viewMode === 'immersion') {
+            this._renderImmersion(unitsContainer, sorted);
+        } else {
+            if (sortMode === 'default') {
+                this._renderByUnit(unitsContainer, words);
+            } else {
+                this._renderFlatList(unitsContainer, words, sortMode);
+            }
+        }
+    }
+
+    /**
+     * 沉浸模式：百词斩风格大卡片
+     */
+    static _renderImmersion(container, words) {
+        if (!words || words.length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">暂无单词</div></div>';
+            return;
+        }
+
+        let currentIndex = 0;
+        const wrapper = document.createElement('div');
+        wrapper.className = 'immersion-container';
+
+        const renderCard = () => {
+            const word = words[currentIndex];
+            if (!word) return;
+
+            wrapper.innerHTML = `
+                <div class="immersion-card">
+                    <div class="immersion-tag">${word.category || '基础'} · Unit ${word.unit || 1}</div>
+                    <div class="immersion-icon">📖</div>
+                    <div class="immersion-word">${word.word}</div>
+                    <div class="immersion-phonetic">/${word.word.replace(/[aeiou]/g, m => m + '·')}/</div>
+                    <div class="immersion-definition">${word.definition || '(无释义)'}</div>
+                    <div class="immersion-nav">
+                        <button class="immersion-nav-btn" id="immersionPrev">◀</button>
+                        <div style="font-size:14px;color:var(--text-muted);">${currentIndex + 1} / ${words.length}</div>
+                        <button class="immersion-nav-btn" id="immersionNext">▶</button>
+                    </div>
+                    <div class="immersion-actions">
+                        <button class="btn btn-sm" id="immersionFav">${word.is_favorite ? '⭐' : '☆'} 收藏</button>
+                        <button class="btn btn-sm btn-primary" id="immersionKnow">✓ 已掌握</button>
+                    </div>
+                </div>
+            `;
+
+            // 上一个
+            wrapper.querySelector('#immersionPrev').addEventListener('click', () => {
+                if (currentIndex > 0) { currentIndex--; renderCard(); }
+                else window.Toast.show('已是第一个');
+            });
+
+            // 下一个
+            wrapper.querySelector('#immersionNext').addEventListener('click', () => {
+                if (currentIndex < words.length - 1) { currentIndex++; renderCard(); }
+                else window.Toast.show('🎉 已全部看完！');
+            });
+
+            // 收藏
+            wrapper.querySelector('#immersionFav').addEventListener('click', async () => {
+                if (word.id) {
+                    await WordDB.toggleFavorite(word.id);
+                    word.is_favorite = !word.is_favorite;
+                    renderCard();
+                    window.Toast.show(word.is_favorite ? '⭐ 已收藏' : '已取消收藏');
+                }
+            });
+
+            // 标记熟悉
+            wrapper.querySelector('#immersionKnow').addEventListener('click', async () => {
+                if (word.id) {
+                    const updated = await WordDB.increaseFamiliarity(word.id);
+                    if (updated) {
+                        window.Toast.show(`✓ "${word.word}" 熟悉度 +1`);
+                        await AchievementHelper.recordStudy();
+                    }
+                    if (currentIndex < words.length - 1) {
+                        currentIndex++;
+                        renderCard();
+                    }
+                }
+            });
+
+            // 键盘左右键
+            const handler = (e) => {
+                if (e.key === 'ArrowLeft') { wrapper.querySelector('#immersionPrev').click(); e.preventDefault(); }
+                else if (e.key === 'ArrowRight') { wrapper.querySelector('#immersionNext').click(); e.preventDefault(); }
+            };
+            document.addEventListener('keydown', handler);
+        };
+
+        renderCard();
+        container.innerHTML = '';
+        container.appendChild(wrapper);
     }
 
     static _renderByUnit(container, words) {
@@ -342,6 +502,98 @@ class HomePage {
             });
             container.appendChild(card);
         });
+    }
+
+    /**
+     * Streak 连续学习天数
+     */
+    static async _renderStreakBanner(container) {
+        const bookFilterEl = container.querySelector('#bookFilter');
+        if (!bookFilterEl) return;
+
+        // 读取或初始化 streak 数据
+        let streak = await WordDB.getSetting('study_streak', { count: 0, lastDate: '' });
+        const today = new Date().toISOString().slice(0, 10);
+
+        if (streak.lastDate !== today) {
+            const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+            if (streak.lastDate === yesterday) {
+                streak.count++;
+            } else if (streak.lastDate !== today) {
+                streak.count = 0;
+            }
+            streak.lastDate = today;
+            await WordDB.saveSetting('study_streak', streak);
+        }
+
+        // 移除旧的 Streak 横幅
+        const oldBanner = container.querySelector('#streakBanner');
+        if (oldBanner) oldBanner.remove();
+
+        if (streak.count > 0) {
+            const banner = document.createElement('div');
+            banner.id = 'streakBanner';
+            banner.style.cssText = 'background:linear-gradient(135deg,rgba(108,140,255,0.1),rgba(167,139,250,0.08));border-left:3px solid var(--accent-purple);padding:10px 16px;border-radius:6px;margin:0 16px 12px;display:flex;align-items:center;gap:12px;';
+            banner.innerHTML = `
+                <span style="font-size:20px;">🔥</span>
+                <span style="flex:1;font-size:13px;color:var(--text-secondary);">
+                    连续学习 <strong style="color:var(--accent-purple);font-size:16px;">${streak.count}</strong> 天
+                </span>
+                <span style="font-size:12px;color:var(--text-muted);">继续加油！</span>
+            `;
+            bookFilterEl.parentNode.insertBefore(banner, bookFilterEl.nextSibling);
+        }
+    }
+
+    /**
+     * 每日一词 Widget
+     */
+    static async _renderDailyWord(container) {
+        const bookFilterEl = container.querySelector('#bookFilter');
+        if (!bookFilterEl) return;
+
+        // 基于当天日期选择一个随机种子单词
+        const today = new Date().toISOString().slice(0, 10);
+        const activeIds = await WordDB.getActiveBookIds();
+        const words = await WordDB.getWordsByBooks(activeIds);
+
+        if (words.length === 0) return;
+
+        // 用日期作为 seed 选词，确保每天同一个词
+        let seed = 0;
+        for (let i = 0; i < today.length; i++) seed = ((seed << 5) - seed) + today.charCodeAt(i);
+        const wordIndex = Math.abs(seed) % words.length;
+        const dailyWord = words[wordIndex];
+
+        const oldWidget = container.querySelector('#dailyWordWidget');
+        if (oldWidget) oldWidget.remove();
+
+        const widget = document.createElement('div');
+        widget.id = 'dailyWordWidget';
+        widget.style.cssText = 'margin:0 16px 12px;';
+        widget.innerHTML = `
+            <div style="background:var(--bg-card);border:1px solid var(--border-color);border-radius:var(--radius-md);padding:14px 16px;box-shadow:var(--shadow-sm);display:flex;align-items:center;gap:12px;">
+                <div style="font-size:24px;line-height:1;">📅</div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">今日单词</div>
+                    <div style="font-size:16px;font-weight:600;color:var(--accent-blue);">${dailyWord.word}</div>
+                    <div style="font-size:13px;color:var(--text-secondary);margin-top:2px;">${dailyWord.definition}</div>
+                </div>
+                <button class="btn btn-sm" id="dailyWordKnowBtn" style="flex-shrink:0;">✓ 知道了</button>
+            </div>
+        `;
+
+        widget.querySelector('#dailyWordKnowBtn').addEventListener('click', async () => {
+            if (dailyWord.id) {
+                await WordDB.increaseFamiliarity(dailyWord.id);
+                window.Toast.show(`✓ "${dailyWord.word}" 熟悉度 +1`);
+                await AchievementHelper.recordStudy();
+            }
+            widget.style.opacity = '0';
+            setTimeout(() => widget.remove(), 300);
+        });
+
+        bookFilterEl.parentNode.insertBefore(widget, bookFilterEl.nextSibling);
     }
 
     static _renderFlatList(container, words, mode) {

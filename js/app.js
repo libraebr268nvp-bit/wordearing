@@ -29,7 +29,8 @@ window.AppState = {
     home: {
         category: '全部',      // 当前分类筛选
         sortMode: 'default',   // default | fam-high | fam-low | alpha-asc | alpha-desc | shuffled
-        shuffledWords: null    // shuffled 模式下存储打乱后的单词 ID 数组（null=还未生成）
+        shuffledWords: null,   // shuffled 模式下存储打乱后的单词 ID 数组（null=还未生成）
+        viewMode: 'list'       // list | flashcard | immersion
     },
     favorites: {
         category: '全部',
@@ -37,6 +38,21 @@ window.AppState = {
         shuffledWords: null    // shuffled 模式下存储的 ID 顺序
     }
 };
+
+// ====== 主题初始化 ======
+(function initTheme() {
+    try {
+        const saved = localStorage.getItem('wordwiz_theme');
+        if (saved === 'light' || saved === 'dark') {
+            document.documentElement.setAttribute('data-theme', saved === 'light' ? 'light' : 'dark');
+        } else {
+            // 默认深色
+            document.documentElement.setAttribute('data-theme', 'dark');
+        }
+    } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+    }
+})();
 
 // ====== 主应用 ======
 class WordWizApp {
@@ -179,7 +195,7 @@ class WordWizApp {
      */
     _getPageFromHash() {
         const hash = window.location.hash.replace('#/', '');
-        const validPages = ['home', 'favorites', 'trash', 'settings', 'challenge', 'wrong-words'];
+        const validPages = ['home', 'favorites', 'trash', 'settings', 'challenge', 'wrong-words', 'typing', 'matching'];
         return validPages.includes(hash) ? hash : null;
     }
 
@@ -236,6 +252,12 @@ class WordWizApp {
                     break;
                 case 'wrong-words':
                     if (typeof WrongWordsPage?.render === 'function') await WrongWordsPage.render(this.container);
+                    break;
+                case 'typing':
+                    if (typeof TypingPage?.render === 'function') await TypingPage.render(this.container);
+                    break;
+                case 'matching':
+                    if (typeof MatchingPage?.render === 'function') await MatchingPage.render(this.container);
                     break;
             }
 
