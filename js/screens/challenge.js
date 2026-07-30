@@ -2,13 +2,15 @@
  * WordWiz - 挑战模式页面
  * 
  * 功能：
- * - 3 种答题模式：四选一 / 汉→英拼写 / 英→汉拼写
- * - 拼写模式带提示（首字母+下划线 / 首字提示）
- * - 难度选择：简单(熟悉度≥3) / 普通(全部) / 困难(熟悉度≤2)
- * - 生命值模式：3 条命，答错扣 1，扣完即止
- * - 计时模式：每题限时 10 秒
- * - 设置：题数（10/20/50/100/自定义）、范围（激活词书/全部/按分类/错题集）
- * - 7 天冷却、错题收集、成就触发
+ * - 4 种模式：看英文选中文 / 看中文选英文 / 逐格拼写 / 配对游戏
+ * - 拼写模式：逐字母格子输入（自动跳转+退格返回），连字符/撇号自动填入
+ * - 拼写提示：每题 2 次，逐格填充字母
+ * - 卡片式首页布局，点击模式卡片直接开始
+ * - 高级设置折叠：题数（10/20/50/100/自定义）、范围、难度
+ * - 附加选项：生命值（1/3/5/10 条命可调）、限时（5/10/15/20/30 秒可调）
+ * - COOLDOWN_DAYS / PER_QUESTION_TIMEOUT / LIVES 可从 challenge_config 动态覆盖
+ * - 7 天冷却、错题收集（200 条上限）、挑战历史记录（50 条）、成就触发
+ * - 答题动画：绿色闪光 / 红框震动 / 爱心裂开 / 连击弹窗 / 心碎飘出
  * 
  * 路由: #/challenge
  * 状态机: start → playing → result
@@ -182,116 +184,170 @@ class ChallengePage {
             mode: 'choice-cn', difficulty: 'normal', lives: false, timed: false
         });
 
+        const modeCards = [
+            { value: 'choice-cn', icon: '📋', name: '看英文选中文', desc: '看英文单词，选择正确的中文释义', color: '#5b8def' },
+            { value: 'choice-en', icon: '📋', name: '看中文选英文', desc: '看中文释义，选择正确的英文单词', color: '#7c5bef' },
+            { value: 'spelling-en', icon: '✍️', name: '逐格拼写', desc: '看中文释义，逐格填充拼出英文单词', color: '#ef5b8c' },
+            { value: 'matching', icon: '🃏', name: '配对游戏', desc: '翻牌配对，匹配单词与释义', color: '#5bef8c' }
+        ];
+
         container.innerHTML = `
-            <div class="challenge-start" style="text-align:center;padding:40px 20px;max-width:560px;margin:0 auto;">
-                <div style="font-size:64px;margin-bottom:16px;">🎯</div>
-                <h2 style="font-size:20px;margin-bottom:6px;">随机抽词挑战</h2>
-                <p style="color:var(--text-muted);font-size:13px;margin-bottom:20px;" id="challengeModeDesc">
-                    ${this._getModeDesc(settings.mode)}
-                </p>
-
-                <div class="challenge-settings" style="text-align:left;margin-bottom:28px;">
-                    <!-- 答题模式 -->
-                    <div class="challenge-setting-row">
-                        <span class="setting-label">模式</span>
-                        <div class="challenge-option-group" id="modeOptions">
-                            <button class="challenge-opt-btn ${settings.mode === 'choice-cn' ? 'active' : ''}" data-value="choice-cn">📋 看英文选中文</button>
-                            <button class="challenge-opt-btn ${settings.mode === 'choice-en' ? 'active' : ''}" data-value="choice-en">📋 看中文选英文</button>
-                            <button class="challenge-opt-btn ${settings.mode === 'spelling-en' ? 'active' : ''}" data-value="spelling-en">✍️ 逐格拼写</button>
-                            <button class="challenge-opt-btn ${settings.mode === 'matching' ? 'active' : ''}" data-value="matching">🃏 配对</button>
-                        </div>
-                    </div>
-
-                    <!-- 题数 -->
-                    <div class="challenge-setting-row">
-                        <span class="setting-label">题数</span>
-                        <div class="challenge-option-group" id="countOptions">
-                            ${[10, 20, 50, 100].map(n => `
-                                <button class="challenge-opt-btn ${settings.count === n ? 'active' : ''}" data-value="${n}">${n}</button>
-                            `).join('')}
-                            <button class="challenge-opt-btn ${![10, 20, 50, 100].includes(settings.count) ? 'active' : ''}" data-value="custom">自定义</button>
-                        </div>
-                    </div>
-                    <div id="customCountRow" style="display:${![10, 20, 50, 100].includes(settings.count) ? 'flex' : 'none'};align-items:center;gap:8px;margin-top:4px;padding-left:48px;">
-                        <input type="number" id="customCountInput" min="1" max="200" value="${![10, 20, 50, 100].includes(settings.count) ? settings.count : 10}"
-                               style="width:80px;padding:4px 8px;border:1px solid var(--border-color);border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary);font-size:13px;">
-                        <span style="color:var(--text-muted);font-size:12px;">题（1~200）</span>
-                    </div>
-
-                    <!-- 范围 -->
-                    <div class="challenge-setting-row">
-                        <span class="setting-label">范围</span>
-                        <div class="challenge-option-group" id="rangeOptions">
-                            <button class="challenge-opt-btn ${settings.rangeType === 'active' ? 'active' : ''}" data-value="active">激活词书</button>
-                            <button class="challenge-opt-btn ${settings.rangeType === 'all' ? 'active' : ''}" data-value="all">全部词库</button>
-                            <button class="challenge-opt-btn ${settings.rangeType === 'category' ? 'active' : ''}" data-value="category">按分类</button>
-                            <button class="challenge-opt-btn ${settings.rangeType === 'wrong-words' ? 'active' : ''}" data-value="wrong-words">📝 错题集</button>
-                            <button class="challenge-opt-btn ${settings.rangeType === 'due-review' ? 'active' : ''}" data-value="due-review">📅 今日待复习</button>
-                        </div>
-                    </div>
-
-                    <div id="categorySelectRow" style="display:${settings.rangeType === 'category' ? 'flex' : 'none'};align-items:center;gap:8px;padding-left:48px;margin-top:4px;">
-                        <span style="color:var(--text-muted);font-size:12px;">分类</span>
-                        <select id="categorySelect" style="padding:4px 8px;border:1px solid var(--border-color);border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary);font-size:13px;">
-                            ${categories.map(c => `
-                                <option value="${c}" ${settings.category === c ? 'selected' : ''}>${c}</option>
-                            `).join('')}
-                            ${categories.length === 0 ? '<option value="">（暂无分类）</option>' : ''}
-                        </select>
-                    </div>
-
-                    <!-- 难度 -->
-                    <div class="challenge-setting-row">
-                        <span class="setting-label">难度</span>
-                        <div class="challenge-option-group" id="difficultyOptions">
-                            <button class="challenge-opt-btn ${settings.difficulty === 'easy' ? 'active' : ''}" data-value="easy">🌱 简单</button>
-                            <button class="challenge-opt-btn ${settings.difficulty === 'normal' ? 'active' : ''}" data-value="normal">⚖️ 普通</button>
-                            <button class="challenge-opt-btn ${settings.difficulty === 'hard' ? 'active' : ''}" data-value="hard">🔥 困难</button>
-                        </div>
-                    </div>
-
-                    <!-- 附加模式 -->
-                    <div class="challenge-setting-row">
-                        <span class="setting-label">附加</span>
-                        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
-                            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
-                                <input type="checkbox" id="livesMode" ${settings.lives ? 'checked' : ''}>
-                                ❤️ 生命值
-                            </label>
-                            <select id="livesCountSelect" style="padding:4px 6px;border:1px solid var(--border-color);border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary);font-size:12px;width:60px;">
-                                ${[1, 3, 5, 10].map(n => `
-                                    <option value="${n}" ${(settings.livesCount || this.LIVES) === n ? 'selected' : ''}>${n}条</option>
-                                `).join('')}
-                            </select>
-                            <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
-                                <input type="checkbox" id="timedMode" ${settings.timed ? 'checked' : ''}>
-                                ⏱ 限时
-                            </label>
-                            <select id="timedSecondsSelect" style="padding:4px 6px;border:1px solid var(--border-color);border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary);font-size:12px;width:70px;">
-                                ${[5, 10, 15, 20, 30].map(n => `
-                                    <option value="${n}" ${(settings.timedSeconds || this.PER_QUESTION_TIMEOUT) === n ? 'selected' : ''}>${n}秒</option>
-                                `).join('')}
-                            </select>
-                        </div>
-                    </div>
+            <div class="challenge-start" style="padding:20px 16px;max-width:600px;margin:0 auto;">
+                <div style="text-align:center;margin-bottom:24px;">
+                    <div style="font-size:48px;margin-bottom:8px;">⚡</div>
+                    <h2 style="font-size:20px;margin-bottom:4px;">挑战模式</h2>
+                    <p style="color:var(--text-muted);font-size:13px;">选择模式开始挑战</p>
                 </div>
 
-                <div id="challengeStartBtnWrapper">
-                    <button class="btn btn-primary" id="challengeStartBtn" style="font-size:16px;padding:12px 40px;">
-                        🚀 开始挑战
-                    </button>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
+                    ${modeCards.map(c => `
+                        <div class="challenge-mode-card" data-value="${c.value}" style="
+                            background:var(--bg-card);border:2px solid ${settings.mode === c.value ? c.color : 'var(--border-color)'};
+                            border-radius:var(--radius-md);padding:20px 14px;text-align:center;cursor:pointer;
+                            transition:all 0.2s ease;position:relative;overflow:hidden;
+                            box-shadow:${settings.mode === c.value ? `0 0 16px ${c.color}33` : 'var(--shadow-sm)'};
+                        ">
+                            <div style="font-size:36px;margin-bottom:8px;">${c.icon}</div>
+                            <div style="font-size:15px;font-weight:700;color:var(--text-primary);margin-bottom:4px;">${c.name}</div>
+                            <div style="font-size:11px;color:var(--text-muted);line-height:1.4;margin-bottom:12px;min-height:30px;">${c.desc}</div>
+                            <button class="btn btn-sm mode-start-btn" data-value="${c.value}" style="
+                                background:${c.color};color:#fff;border:none;padding:6px 18px;border-radius:var(--radius-sm);
+                                font-size:13px;cursor:pointer;transition:var(--transition);
+                            ">🚀 开始</button>
+                        </div>
+                    `).join('')}
                 </div>
-                <div id="challengeStartError" style="color:var(--accent-red);font-size:13px;margin-top:12px;display:none;"></div>
+
+                <!-- 折叠设置 -->
+                <details style="margin-bottom:16px;" id="settingsToggle">
+                    <summary style="cursor:pointer;color:var(--text-muted);font-size:13px;padding:8px;text-align:center;user-select:none;">
+                        ⚙️ 高级设置
+                    </summary>
+                    <div class="challenge-settings" style="text-align:left;margin-top:12px;padding:16px;background:var(--bg-secondary);border-radius:var(--radius-md);">
+                        <!-- 题数 -->
+                        <div class="challenge-setting-row">
+                            <span class="setting-label">题数</span>
+                            <div class="challenge-option-group" id="countOptions">
+                                ${[10, 20, 50, 100].map(n => `
+                                    <button class="challenge-opt-btn ${settings.count === n ? 'active' : ''}" data-value="${n}">${n}</button>
+                                `).join('')}
+                                <button class="challenge-opt-btn ${![10, 20, 50, 100].includes(settings.count) ? 'active' : ''}" data-value="custom">自定义</button>
+                            </div>
+                        </div>
+                        <div id="customCountRow" style="display:${![10, 20, 50, 100].includes(settings.count) ? 'flex' : 'none'};align-items:center;gap:8px;margin-top:4px;padding-left:48px;">
+                            <input type="number" id="customCountInput" min="1" max="200" value="${![10, 20, 50, 100].includes(settings.count) ? settings.count : 10}"
+                                   style="width:80px;padding:4px 8px;border:1px solid var(--border-color);border-radius:var(--radius-sm);background:var(--bg-card);color:var(--text-primary);font-size:13px;">
+                            <span style="color:var(--text-muted);font-size:12px;">题（1~200）</span>
+                        </div>
+
+                        <!-- 范围 -->
+                        <div class="challenge-setting-row">
+                            <span class="setting-label">范围</span>
+                            <div class="challenge-option-group" id="rangeOptions">
+                                <button class="challenge-opt-btn ${settings.rangeType === 'active' ? 'active' : ''}" data-value="active">激活词书</button>
+                                <button class="challenge-opt-btn ${settings.rangeType === 'all' ? 'active' : ''}" data-value="all">全部词库</button>
+                                <button class="challenge-opt-btn ${settings.rangeType === 'category' ? 'active' : ''}" data-value="category">按分类</button>
+                                <button class="challenge-opt-btn ${settings.rangeType === 'wrong-words' ? 'active' : ''}" data-value="wrong-words">📝 错题集</button>
+                                <button class="challenge-opt-btn ${settings.rangeType === 'due-review' ? 'active' : ''}" data-value="due-review">📅 今日待复习</button>
+                            </div>
+                        </div>
+                        <div id="categorySelectRow" style="display:${settings.rangeType === 'category' ? 'flex' : 'none'};align-items:center;gap:8px;margin-top:4px;padding-left:48px;">
+                            <span style="color:var(--text-muted);font-size:12px;">分类</span>
+                            <select id="categorySelect" style="padding:4px 8px;border:1px solid var(--border-color);border-radius:var(--radius-sm);background:var(--bg-card);color:var(--text-primary);font-size:13px;">
+                                ${categories.map(c => `
+                                    <option value="${c}" ${settings.category === c ? 'selected' : ''}>${c}</option>
+                                `).join('')}
+                                ${categories.length === 0 ? '<option value="">（暂无分类）</option>' : ''}
+                            </select>
+                        </div>
+
+                        <!-- 难度 -->
+                        <div class="challenge-setting-row">
+                            <span class="setting-label">难度</span>
+                            <div class="challenge-option-group" id="difficultyOptions">
+                                <button class="challenge-opt-btn ${settings.difficulty === 'easy' ? 'active' : ''}" data-value="easy">🌱 简单</button>
+                                <button class="challenge-opt-btn ${settings.difficulty === 'normal' ? 'active' : ''}" data-value="normal">⚖️ 普通</button>
+                                <button class="challenge-opt-btn ${settings.difficulty === 'hard' ? 'active' : ''}" data-value="hard">🔥 困难</button>
+                            </div>
+                        </div>
+
+                        <!-- 附加 -->
+                        <div class="challenge-setting-row">
+                            <span class="setting-label">附加</span>
+                            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+                                <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
+                                    <input type="checkbox" id="livesMode" ${settings.lives ? 'checked' : ''}>
+                                    ❤️ 生命值
+                                </label>
+                                <select id="livesCountSelect" style="padding:4px 6px;border:1px solid var(--border-color);border-radius:var(--radius-sm);background:var(--bg-card);color:var(--text-primary);font-size:12px;width:60px;">
+                                    ${[1, 3, 5, 10].map(n => `
+                                        <option value="${n}" ${(settings.livesCount || this.LIVES) === n ? 'selected' : ''}>${n}条</option>
+                                    `).join('')}
+                                </select>
+                                <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);cursor:pointer;">
+                                    <input type="checkbox" id="timedMode" ${settings.timed ? 'checked' : ''}>
+                                    ⏱ 限时
+                                </label>
+                                <select id="timedSecondsSelect" style="padding:4px 6px;border:1px solid var(--border-color);border-radius:var(--radius-sm);background:var(--bg-card);color:var(--text-primary);font-size:12px;width:70px;">
+                                    ${[5, 10, 15, 20, 30].map(n => `
+                                        <option value="${n}" ${(settings.timedSeconds || this.PER_QUESTION_TIMEOUT) === n ? 'selected' : ''}>${n}秒</option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <div id="challengeStartError" style="color:var(--accent-red);font-size:13px;text-align:center;display:none;margin-bottom:12px;"></div>
+
+                <div style="text-align:center;font-size:11px;color:var(--text-muted);">
+                    💡 通过挑战的单词 ${this.COOLDOWN_DAYS} 天内不会重复出现
+                </div>
             </div>
         `;
 
-        // 模式切换 → 更新描述
-        container.querySelectorAll('#modeOptions .challenge-opt-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                container.querySelectorAll('#modeOptions .challenge-opt-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
+        // 卡片悬停高亮
+        container.querySelectorAll('.challenge-mode-card').forEach(card => {
+            card.addEventListener('mouseenter', () => {
+                if (!card.classList.contains('active')) {
+                    card.style.transform = 'translateY(-2px)';
+                    card.style.boxShadow = 'var(--shadow-md)';
+                }
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = '';
+                if (!card.classList.contains('active')) {
+                    card.style.boxShadow = 'var(--shadow-sm)';
+                }
+            });
+        });
+
+        // 卡片点击 = 选中该模式
+        container.querySelectorAll('.challenge-mode-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                // 如果点的是按钮，不切换选择，由按钮事件处理
+                if (e.target.closest('.mode-start-btn')) return;
+                const val = card.dataset.value;
+                container.querySelectorAll('.challenge-mode-card').forEach(c => {
+                    c.style.borderColor = 'var(--border-color)';
+                    c.style.boxShadow = 'var(--shadow-sm)';
+                    c.classList.remove('active');
+                });
+                card.style.borderColor = modeCards.find(m => m.value === val).color;
+                card.style.boxShadow = `0 0 16px ${modeCards.find(m => m.value === val).color}33`;
+                card.classList.add('active');
+                // 更新选中模式（用于开始挑战按钮）
                 const desc = document.getElementById('challengeModeDesc');
-                if (desc) desc.textContent = this._getModeDesc(btn.dataset.value);
+                if (desc) desc.textContent = this._getModeDesc(val);
+            });
+        });
+
+        // 各卡片「开始」按钮 → 直接启动该模式
+        container.querySelectorAll('.mode-start-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const mode = btn.dataset.value;
+                this._startGameWithMode(container, mode);
             });
         });
 
@@ -312,9 +368,107 @@ class ChallengePage {
                 document.getElementById('categorySelectRow').style.display = btn.dataset.value === 'category' ? 'flex' : 'none';
             });
         });
+    }
 
-        // 开始按钮
-        document.getElementById('challengeStartBtn').addEventListener('click', () => this._startGame(container));
+    /** 以指定模式启动游戏（从卡片按钮调用） */
+    static async _startGameWithMode(container, mode) {
+        // 把选中的模式设到 settings 中
+        const activeModeBtn = container.querySelector('#modeOptions .challenge-opt-btn.active');
+        // 模拟点击对应模式按钮以确保设置同步（但已经通过 mode 参数指定）
+        // 直接保存并启动
+        const activeCountBtn = container.querySelector('#countOptions .challenge-opt-btn.active');
+        let count;
+        if (activeCountBtn.dataset.value === 'custom') {
+            const input = document.getElementById('customCountInput');
+            count = parseInt(input.value) || 10;
+            count = Math.min(200, Math.max(1, count));
+        } else {
+            count = parseInt(activeCountBtn.dataset.value);
+        }
+
+        const activeRangeBtn = container.querySelector('#rangeOptions .challenge-opt-btn.active');
+        const rangeType = activeRangeBtn.dataset.value;
+        let category = null;
+        if (rangeType === 'category') {
+            category = document.getElementById('categorySelect').value;
+        }
+
+        const activeDiffBtn = container.querySelector('#difficultyOptions .challenge-opt-btn.active');
+        const difficulty = activeDiffBtn ? activeDiffBtn.dataset.value : 'normal';
+
+        const lives = document.getElementById('livesMode').checked;
+        const timed = document.getElementById('timedMode').checked;
+
+        const livesCountEl = document.getElementById('livesCountSelect');
+        const timedSecondsEl = document.getElementById('timedSecondsSelect');
+        if (lives && livesCountEl) this.LIVES = parseInt(livesCountEl.value) || this.LIVES;
+        if (timed && timedSecondsEl) this.PER_QUESTION_TIMEOUT = parseInt(timedSecondsEl.value) || this.PER_QUESTION_TIMEOUT;
+
+        await WordDB.saveSetting('challenge_settings', {
+            count, rangeType, category, mode, difficulty, lives, timed,
+            livesCount: this.LIVES,
+            timedSeconds: this.PER_QUESTION_TIMEOUT
+        });
+
+        if (mode === 'matching') {
+            await MatchingPage.render(container);
+            return;
+        }
+
+        const wrapper = document.getElementById('challengeContent');
+        if (wrapper) {
+            // 调用原始的 _startGame，但先覆盖 mode
+            this._currentMode = mode;
+            await this._startGameLogic(container, count, rangeType, category, mode, difficulty, lives, timed);
+        }
+    }
+
+    /** 将 _startGame 中的游戏启动逻辑抽出来，供卡牌直接调用 */
+    static async _startGameLogic(container, count, rangeType, category, mode, difficulty, lives, timed) {
+        this._answerSubmitted = false;
+        try {
+            const pool = await this._getAvailablePool(category, rangeType, difficulty);
+            const isChoiceMode = mode === 'choice-cn' || mode === 'choice-en';
+            const minPool = isChoiceMode ? 4 : 2;
+            if (pool.length < minPool) {
+                this._showError(container, `可用单词不足 ${minPool} 个（当前 ${pool.length} 个）。冷却中的词 ${this.COOLDOWN_DAYS} 天后可再次挑战。`);
+                return;
+            }
+            if (pool.length < count) {
+                this._showError(container, `可用单词仅有 ${pool.length} 个，不足 ${count} 题。将使用全部可用单词进行挑战。`);
+                count = pool.length;
+            }
+
+            const shuffled = [...pool];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            const questions = shuffled.slice(0, count);
+
+            const quiz = isChoiceMode
+                ? questions.map(q => this._buildChoiceQuestion(q, pool, mode))
+                : questions.map(q => this._buildSpellingQuestion(q, mode));
+
+            this._currentMode = mode;
+            this._currentQuiz = quiz;
+            this._currentIndex = 0;
+            this._correctCount = 0;
+            this._wrongIndices = [];
+            this._startTime = Date.now();
+            this._streakCount = 0;
+            this._maxStreak = 0;
+            this._lives = lives ? this.LIVES : -1;
+            this._hasLivesMode = lives;
+            this._hasTimedMode = timed;
+            this._isFinished = false;
+            this._timeoutFired = false;
+
+            this._renderQuestion(container);
+        } catch (err) {
+            this._showError(container, '加载失败：' + (err.message || err));
+            console.error('[Challenge] 启动失败:', err);
+        }
     }
 
     static _getModeDesc(mode) {
@@ -497,6 +651,11 @@ class ChallengePage {
     static _buildSpellingQuestion(word, mode) {
         const isEnToCn = mode === 'spelling-cn';
         const correctAnswer = isEnToCn ? (word.definition || '').trim() : word.word.trim();
+        // 逐格拼写：拆成字母，标记非字母（连字符/撇号）为 autoFill
+        const letters = isEnToCn ? null : correctAnswer.split('').map(ch => ({
+            char: ch,
+            isAutoFill: /[^a-zA-Z]/.test(ch)
+        }));
         return {
             type: 'spelling',
             mode: mode,
@@ -505,8 +664,8 @@ class ChallengePage {
             // 英→汉：显示 word.word，正确答案是 definition（单输入框）
             prompt: isEnToCn ? word.word : (word.definition || '(无释义)'),
             correctAnswer: correctAnswer,
-            // 逐格拼写模式：将正确答案拆成字母数组
-            letters: isEnToCn ? null : correctAnswer.split(''),
+            // 逐格拼写模式：字母对象数组
+            letterData: letters,
             // 提示：汉→英显示首字母+下划线；英→汉显示首字
             hint: isEnToCn
                 ? word.word.charAt(0) + '_'.repeat(Math.max(0, word.word.length - 1))
@@ -610,7 +769,7 @@ class ChallengePage {
     static _renderSpellingQuestion(container, q, total, elapsed, minutes, seconds, livesHtml, timedHtml) {
         const isEnToCn = q.mode === 'spelling-cn';
         const hintsRemaining = q.maxHints - q.hintsUsed;
-        const hasLetterBoxes = !isEnToCn && q.letters && q.letters.length > 0;
+        const hasLetterBoxes = !isEnToCn && q.letterData && q.letterData.length > 0;
 
         container.innerHTML = `
             <div class="challenge-quiz" style="max-width:600px;margin:0 auto;padding:20px;">
@@ -653,8 +812,9 @@ class ChallengePage {
                 <div style="text-align:center;margin-bottom:20px;">
                     ${hasLetterBoxes ? `
                         <div id="letterBoxContainer" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:12px;">
-                            ${q.letters.map((_, i) => `
-                                <input type="text" class="letter-input" data-index="${i}" maxlength="1"
+                            ${q.letterData.map((ld, i) => ld.isAutoFill
+                                ? `<span style="width:24px;height:44px;display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--text-muted);">${ld.char}</span>`
+                                : `<input type="text" class="letter-input" data-index="${i}" maxlength="1"
                                        autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
                                        style="width:36px;height:44px;padding:4px;border:2px solid var(--border-color);border-radius:var(--radius-sm);
                                               background:var(--bg-secondary);color:var(--text-primary);font-size:20px;text-align:center;outline:none;
@@ -736,8 +896,10 @@ class ChallengePage {
             for (let i = 0; i < boxes.length; i++) {
                 if (!boxes[i].value) { nextIdx = i; break; }
             }
-            if (nextIdx >= 0 && nextIdx < q.letters.length) {
-                boxes[nextIdx].value = q.letters[nextIdx].toLowerCase();
+            if (nextIdx >= 0 && nextIdx < q.letterData.length) {
+                // 找到对应字母（跳过 autoFill 符号）
+                const targetLetter = q.letterData[nextIdx];
+                boxes[nextIdx].value = targetLetter.isAutoFill ? targetLetter.char : targetLetter.char.toLowerCase();
                 if (nextIdx < boxes.length - 1) boxes[nextIdx + 1].focus();
                 else boxes[nextIdx].focus();
             }
@@ -852,9 +1014,15 @@ class ChallengePage {
 
     /** 获取拼写用户答案（逐格拼接 or 单输入框） */
     static _getSpellingUserAnswer(container) {
+        const q = this._currentQuiz[this._currentIndex];
         const boxes = container.querySelectorAll('.letter-input');
-        if (boxes.length > 0) {
-            return Array.from(boxes).map(b => b.value).join('').trim();
+        if (boxes.length > 0 && q.letterData) {
+            // 用 letterData 重建完整答案（将 autoFill 符号插回对应位置）
+            let letterIdx = 0;
+            return q.letterData.map(ld => {
+                if (ld.isAutoFill) return ld.char;
+                return boxes[letterIdx++] ? boxes[letterIdx - 1].value : '';
+            }).join('').trim();
         }
         const input = document.getElementById('spellingInput');
         return input ? input.value.trim() : '';
@@ -1223,10 +1391,6 @@ class ChallengePage {
             const content = document.getElementById('challengeContent');
             if (content) {
                 await this._renderStart(content);
-                setTimeout(() => {
-                    const startBtn = document.getElementById('challengeStartBtn');
-                    if (startBtn) startBtn.click();
-                }, 100);
             }
         });
         document.getElementById('challengeHomeBtn').addEventListener('click', () => {
