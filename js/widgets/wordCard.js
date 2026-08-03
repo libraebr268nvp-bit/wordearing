@@ -32,10 +32,11 @@ class WordCard {
         wordText.textContent = word.word;
         row.appendChild(wordText);
 
-        // 释义
+        // 释义（最长两行截断，悬停显示完整内容）
         const def = document.createElement('span');
         def.className = 'word-definition';
         def.textContent = word.definition;
+        def.title = word.definition || '';
         row.appendChild(def);
 
         // 操作按钮组
